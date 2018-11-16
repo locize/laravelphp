@@ -13,7 +13,7 @@ npm install --save laravelphp
 You can then `require()` laravel as normal:
 
 ```js
-const laravel = require('laravelphp');
+const laravelphp = require('laravelphp');
 ```
 
 Or you can direclty `require()` its functions:
