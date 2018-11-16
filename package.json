@@ -1,0 +1,36 @@
+{
+  "name": "laravelphp",
+  "version": "1.0.0",
+  "description": "laravel2js and js2laravel converter laravel php resource utils",
+  "main": "index.js",
+  "engines": {
+    "node": ">=6.0.0"
+  },
+  "dependencies": {
+    "php-parser": "3.0.0-prerelease.7"
+  },
+  "devDependencies": {
+    "eslint": "^4.4.1",
+    "expect.js": "^0.3.1",
+    "mocha": "^3.2.0"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "test": "npm run lint && mocha test"
+  },
+  "keywords": [
+    "laravel",
+    "php",
+    "json",
+    "js",
+    "translation",
+    "converter"
+  ],
+  "author": "adrai",
+  "license": "MIT",
+  "homepage": "http://locize.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/locize/laravelphp.git"
+  }
+}
