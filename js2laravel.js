@@ -1,8 +1,7 @@
 function js2laravel(resources, cb) {
   var result = `<?php
   return [`;
-  const end = `  ];
-?>`;
+  const end = '  ];';
 
   if (resources) {
     const keys = Object.keys(resources);
