@@ -3,19 +3,26 @@ function js2laravel(resources, cb) {
   return [`;
   const end = '  ];';
 
-  if (resources) {
-    const keys = Object.keys(resources);
-    keys.forEach((key, index) => {
-      var value = resources[key];
-      if (value && typeof value === 'string') {
-        value = value.replace(/'/g, '\\\'');
-      }
-      result += `\n    '${key}' => '${value}'`;
-      if (index + 1 < keys.length) {
-        result += ',';
-      }
-    });
-  }
+  (function stringifyJs(obj, level) {
+    if (obj) {
+      const keys = Object.keys(obj);
+      keys.forEach((key, index) => {
+        var value = obj[key] || '';
+        if (typeof value === 'string') {
+          value = value.replace(/'/g, '\\\'');
+          result += `\n  ${'  '.repeat(level)}'${key}' => '${value}'`;
+        }
+        if (typeof value === 'object') {
+          result += `\n  ${'  '.repeat(level)}'${key}' => [`;
+          stringifyJs(value, level + 1);
+          result += `\n  ${'  '.repeat(level)}]`;
+        }
+        if (index + 1 < keys.length) {
+          result += ',';
+        }
+      });
+    }
+  })(resources, 1);
 
   result += `\n${end}`;
 

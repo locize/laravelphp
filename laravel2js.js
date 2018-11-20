@@ -20,12 +20,20 @@ function laravelToJs(str, cb) {
     const ast = parser.parseCode(str);
     if (ast && ast.children && ast.children.length > 0) {
       const returnElem = ast.children.find((ele) => (ele.kind === 'return'));
-      if (returnElem && returnElem.expr && returnElem.expr.items) {
-        returnElem.expr.items.forEach((item) => {
-          if (item && item.kind === 'entry' && item.key && item.key.kind === 'string' && item.key.value && item.value && item.value.kind === 'string') {
-            result[item.key.value] = item.value.value || '';
-          }
-        });
+      if (returnElem && returnElem.expr && returnElem.expr.kind === 'array' && returnElem.expr.items) {
+        (function parseArr(items, parent) {
+          items.forEach((item) => {
+            if (item && item.kind === 'entry' && item.key && item.key.kind === 'string' && item.key.value && item.value) {
+              if (item.value.kind === 'string') {
+                parent[item.key.value] = item.value.value || '';
+              }
+              if (item.value.kind === 'array' && item.value.items) {
+                parent[item.key.value] = {};
+                parseArr(item.value.items, parent[item.key.value]);
+              }
+            }
+          });
+        })(returnElem.expr.items, result);
       }
     }
 
