@@ -28,16 +28,19 @@ const laravel2js = require('laravelphp/laravel2js');
 
 const php = `<?php
   return [
-    'key1' => 'Hello',
+    'key1' => 'Hello! Let\'s go!',
     'key2' => 'An application to manipulate and process laravel php language files',
-    'key.nested' => 'laravel Data Manager'
-  ];
-?>`;
+    'key' => [
+      'nested' => 'laravel Data Manager'
+    ]
+  ];`;
 
 const js = {
-  "key1": "Hello",
+  "key1": "Hello! Let's go!",
   "key2": "An application to manipulate and process laravel php language files",
-  "key.nested": "laravel Data Manager"
+  "key": {
+    "nested": "laravel Data Manager"
+  }
 };
 
 
