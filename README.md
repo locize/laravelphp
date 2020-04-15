@@ -10,16 +10,22 @@ Alternatively, you can install using npm:
 npm install --save laravelphp
 ```
 
-You can then `require()` laravel as normal:
+You can then `import` or `require()` laravel as normal:
 
 ```js
-const laravelphp = require('laravelphp');
+import resx from 'resx'
+// or
+const laravelphp = require('laravelphp')
+
+laravelphp.laravel2js(php, (err, res) => {})
 ```
 
-Or you can direclty `require()` its functions:
+Or you can direclty `import` or `require()` its functions:
 
 ```js
-const laravel2js = require('laravelphp/laravel2js');
+import resx2js from 'laravelphp/laravel2js'
+// or
+const resx2js = require('laravelphp/cjs/laravel2js')
 ```
 
 ## Usage
@@ -33,7 +39,7 @@ const php = `<?php
     'key' => [
       'nested' => 'laravel Data Manager'
     ]
-  ];`;
+  ];`
 
 const js = {
   "key1": "Hello! Let's go!",
@@ -41,17 +47,27 @@ const js = {
   "key": {
     "nested": "laravel Data Manager"
   }
-};
+}
 
 
-const laravel2js = require('laravelphp/laravel2js');
+import laravel2js from 'laravelphp/laravel2js'
 laravel2js(php, (err, res) => {
   // res is like js
 });
 
-const js2laravel = require('laravelphp/js2laravel');
+import js2laravel from 'laravelphp/js2laravel'
 js2laravel(js, (err, res) => {
   // res is like php
 });
 
+```
+
+Omitting the callback returns a promise
+
+```js
+const resJs = await laravel2js(php)
+const resPhp = await js2laravel(js)
+// or
+laravel2js(php).then((res) => {})
+js2laravel(js).then((res) => {})
 ```
