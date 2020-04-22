@@ -1,6 +1,6 @@
 {
   "name": "laravelphp",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "laravel2js and js2laravel converter laravel php resource utils",
   "type": "module",
   "main": "./cjs/index.js",
