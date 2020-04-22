@@ -16,6 +16,15 @@
     "./js2laravel": {
       "require": "./cjs/js2laravel.js",
       "default": "./lib/js2laravel.js"
+    },
+    "./cjs": {
+      "default": "./cjs/index.js"
+    },
+    "./cjs/laravel2js": {
+      "default": "./cjs/laravel2js.js"
+    },
+    "./cjs/js2laravel": {
+      "default": "./cjs/js2laravel.js"
     }
   },
   "module": "./lib/index.js",
