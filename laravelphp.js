@@ -4,6 +4,18 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+Object.defineProperty(exports, "laravel2js", {
+  enumerable: true,
+  get: function get() {
+    return _laravel2js["default"];
+  }
+});
+Object.defineProperty(exports, "js2laravel", {
+  enumerable: true,
+  get: function get() {
+    return _js2laravel["default"];
+  }
+});
 exports["default"] = void 0;
 
 var _laravel2js = _interopRequireDefault(require("./laravel2js.js"));
@@ -17,7 +29,6 @@ var _default = {
   js2laravel: _js2laravel["default"]
 };
 exports["default"] = _default;
-module.exports = exports.default;
 },{"./js2laravel.js":2,"./laravel2js.js":3}],2:[function(require,module,exports){
 "use strict";
 
@@ -80,13 +91,13 @@ module.exports = exports.default;
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports["default"] = laravelToJs;
+exports["default"] = laravel2js;
 
 var _phpParser = _interopRequireDefault(require("php-parser"));
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { "default": obj }; }
 
-var laravelToJsClb = function laravelToJsClb(str, cb) {
+var laravel2jsClb = function laravel2jsClb(str, cb) {
   if (typeof str !== 'string') {
     var err = new Error('The first parameter was not a string');
     if (!cb) throw err;
@@ -140,16 +151,16 @@ var laravelToJsClb = function laravelToJsClb(str, cb) {
   }
 };
 
-function laravelToJs(str, cb) {
+function laravel2js(str, cb) {
   if (!cb) {
     return new Promise(function (resolve, reject) {
-      return laravelToJsClb(str, function (err, ret) {
+      return laravel2jsClb(str, function (err, ret) {
         return err ? reject(err) : resolve(ret);
       });
     });
   }
 
-  return laravelToJsClb(str, cb);
+  return laravel2jsClb(str, cb);
 }
 
 module.exports = exports.default;
