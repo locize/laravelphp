@@ -1,6 +1,7 @@
 /build
 /node_modules
 /cjs
+/esm
 /dist
 /laravelphp.js
 /laravelphp.min.js
