@@ -13,7 +13,7 @@ npm install --save laravelphp
 You can then `import` or `require()` laravel as normal:
 
 ```js
-import resx from 'resx'
+import laravelphp from 'laravelphp'
 // or
 const laravelphp = require('laravelphp')
 

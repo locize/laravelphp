@@ -1,3 +1,7 @@
+### 2.0.4
+
+- update deps
+
 ### 2.0.3
 
 - transpile also esm
