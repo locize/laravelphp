@@ -1,4 +1,4 @@
-[![travis](https://img.shields.io/travis/locize/laravelphp.svg)](https://travis-ci.org/locize/laravelphp) [![npm](https://img.shields.io/npm/v/laravelphp.svg)](https://npmjs.org/package/laravelphp)
+[![npm](https://img.shields.io/npm/v/laravelphp.svg)](https://npmjs.org/package/laravelphp)
 
 ## Download
 
