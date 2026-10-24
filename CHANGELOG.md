@@ -1,3 +1,7 @@
+### 2.0.5
+
+- `js2laravel`: backslashes and quotes are escaped in keys and values, so a trailing backslash or a `'` in a key no longer breaks the PHP file, and a `\\` in a value no longer loses a backslash ([#3](https://github.com/locize/laravelphp/pull/3), by [@Pharex38](https://github.com/Pharex38))
+
 ### 2.0.4
 
 - update deps

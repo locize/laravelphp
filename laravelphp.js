@@ -32,6 +32,9 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = js2laravel;
 function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
+var quote = function quote(str) {
+  return "'".concat(String(str).replace(/\\/g, '\\\\').replace(/'/g, '\\\''), "'");
+};
 var js2laravelClb = function js2laravelClb(resources, cb) {
   var result = "<?php\n  return [";
   var end = '  ];';
@@ -41,11 +44,10 @@ var js2laravelClb = function js2laravelClb(resources, cb) {
       keys.forEach(function (key, index) {
         var value = obj[key] || '';
         if (typeof value === 'string') {
-          value = value.replace(/'/g, '\\\'');
-          result += "\n  ".concat('  '.repeat(level), "'").concat(key, "' => '").concat(value, "'");
+          result += "\n  ".concat('  '.repeat(level)).concat(quote(key), " => ").concat(quote(value));
         }
         if (_typeof(value) === 'object') {
-          result += "\n  ".concat('  '.repeat(level), "'").concat(key, "' => [");
+          result += "\n  ".concat('  '.repeat(level)).concat(quote(key), " => [");
           stringifyJs(value, level + 1);
           result += "\n  ".concat('  '.repeat(level), "]");
         }
