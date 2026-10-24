@@ -106,15 +106,18 @@ var laravel2jsClb = function laravel2jsClb(str, cb) {
       if (returnElem && returnElem.expr && returnElem.expr.kind === 'array' && returnElem.expr.items) {
         ;
         (function parseArr(items, parent) {
+          var nextIndex = 0;
           items.forEach(function (item) {
-            if (item && item.kind === 'entry' && item.key && item.key.kind === 'string' && item.key.value && item.value) {
-              if (item.value.kind === 'string') {
-                parent[item.key.value] = item.value.value || '';
-              }
-              if (item.value.kind === 'array' && item.value.items) {
-                parent[item.key.value] = {};
-                parseArr(item.value.items, parent[item.key.value]);
-              }
+            if (!item || item.kind !== 'entry' || !item.value) return;
+            var key;
+            if (!item.key) key = String(nextIndex);else if (item.key.kind === 'string' && item.key.value || item.key.kind === 'number') key = String(item.key.value);else return;
+            if (/^(0|[1-9]\d*)$/.test(key)) nextIndex = Math.max(nextIndex, Number(key) + 1);
+            if (item.value.kind === 'string') {
+              parent[key] = item.value.value || '';
+            }
+            if (item.value.kind === 'array' && item.value.items) {
+              parent[key] = {};
+              parseArr(item.value.items, parent[key]);
             }
           });
         })(returnElem.expr.items, result);
