@@ -46,3 +46,14 @@ describe('escaping', () => {
     expect(await require('../').laravel2js(php)).to.eql(js)
   })
 })
+
+describe('implicit and integer keys', () => {
+  const php = "<?php\n  return [\n    'months' => ['January', 'February'],\n    'mixed' => ['x', 5 => 'five', '7' => 'seven', 'k' => 'v', 'y']\n  ];"
+
+  test('laravel2js', (fn) => async () => {
+    expect(await fn(php)).to.eql({
+      months: { 0: 'January', 1: 'February' },
+      mixed: { 0: 'x', 5: 'five', 7: 'seven', k: 'v', 8: 'y' }
+    })
+  })
+})
