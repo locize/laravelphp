@@ -35,3 +35,14 @@ describe('promise', () => {
     expect(res).to.eql(fixtures.example.php)
   })
 })
+
+describe('escaping', () => {
+  const js = { trailing: 'ends with \\', path: 'C:\\\\temp', quote: "it's", "it's": { 'nested\\': 'v' } }
+
+  test('js2laravel', (fn) => async () => {
+    const php = await fn(js)
+    expect(php).to.contain("'trailing' => 'ends with \\\\'")
+    expect(php).to.contain("'it\\'s' => [")
+    expect(await require('../').laravel2js(php)).to.eql(js)
+  })
+})
