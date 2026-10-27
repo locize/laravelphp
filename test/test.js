@@ -57,3 +57,11 @@ describe('implicit and integer keys', () => {
     })
   })
 })
+
+describe('double-quoted strings', () => {
+  const php = '<?php\n  return [\n    \'quoted\' => "Say \\"hi\\"",\n    \'newline\' => "Line 1\\nLine \\"2\\"",\n  ];'
+
+  test('laravel2js', (fn) => async () => {
+    expect(await fn(php)).to.eql({ quoted: 'Say "hi"', newline: 'Line 1\nLine "2"' })
+  })
+})
