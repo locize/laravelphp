@@ -19,7 +19,7 @@ Object.defineProperty(exports, "laravel2js", {
 });
 var _laravel2js = _interopRequireDefault(require("./laravel2js.js"));
 var _js2laravel = _interopRequireDefault(require("./js2laravel.js"));
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 var _default = exports.default = {
   laravel2js: _laravel2js.default,
   js2laravel: _js2laravel.default
@@ -80,7 +80,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = laravel2js;
 var _phpParser = _interopRequireDefault(require("php-parser"));
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+function _interopRequireDefault(e) { return e && e.__esModule ? e : { default: e }; }
 var laravel2jsClb = function laravel2jsClb(str, cb) {
   if (typeof str !== 'string') {
     var err = new Error('The first parameter was not a string');
@@ -147,7 +147,7 @@ module.exports = exports.default;
  * 
  *   Package: php-parser
  *   Parse PHP code from JS and returns its AST
- *   Build: 966fc2556208046b400c - 6/7/2023
+ *   Build: aad3e9e78d4989c75970 - 6/10/2026
  *   Copyright (C) 2021 Glayzzle (BSD-3-Clause)
  *   @authors https://github.com/glayzzle/php-parser/graphs/contributors
  *   @url http://glayzzle.com
@@ -167,8 +167,8 @@ return /******/ (() => { // webpackBootstrap
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 555:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8938
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -177,8 +177,8 @@ return /******/ (() => { // webpackBootstrap
  */
 
 
-var Location = __webpack_require__(1907);
-var Position = __webpack_require__(7724);
+var Location = __webpack_require__(4778);
+var Position = __webpack_require__(8822);
 
 /**
  * ## Class hierarchy
@@ -278,6 +278,7 @@ var Position = __webpack_require__(7724);
  *       - [Namespace](#namespace)
  *     - [PropertyStatement](#propertystatement)
  *     - [Property](#property)
+ *       - [PropertyHook](#propertyhook)
  *     - [Declaration](#declaration)
  *       - [Class](#class)
  *       - [Interface](#interface)
@@ -303,9 +304,9 @@ var AST = function AST(withPositions, withSource) {
 
 // operators in ascending order of precedence
 AST.precedence = {};
-[["or"], ["xor"], ["and"], ["="], ["?"], ["??"], ["||"], ["&&"], ["|"], ["^"], ["&"], ["==", "!=", "===", "!==", /* '<>', */"<=>"], ["<", "<=", ">", ">="], ["<<", ">>"], ["+", "-", "."], ["*", "/", "%"], ["!"], ["instanceof"], ["cast", "silent"], ["**"]
+[["or"], ["xor"], ["and"], ["="], ["?"], ["??"], ["||"], ["&&"], ["|"], ["^"], ["&"], ["==", "!=", "===", "!==", /* '<>', */"<=>"], ["<", "<=", ">", ">="], ["<<", ">>"], ["+", "-", "."], ["*", "/", "%"], ["!"], ["instanceof"], ["u-", "u+", "u~"], ["cast", "silent"], ["**"]
 // TODO: [ (array)
-// TODO: clone, new
+// TODO: new
 ].forEach(function (list, index) {
   list.forEach(function (operator) {
     AST.precedence[operator] = index + 1;
@@ -331,6 +332,9 @@ AST.prototype.isRightAssociative = function (operator) {
  */
 AST.prototype.swapLocations = function (target, first, last, parser) {
   if (this.withPositions) {
+    if (!target || !target.loc || !first || !first.loc || !last || !last.loc) {
+      return;
+    }
     target.loc.start = first.loc.start;
     target.loc.end = last.loc.end;
     if (this.withSource) {
@@ -347,6 +351,9 @@ AST.prototype.swapLocations = function (target, first, last, parser) {
  */
 AST.prototype.resolveLocations = function (target, first, last, parser) {
   if (this.withPositions) {
+    if (!target || !target.loc || !first || !first.loc || !last || !last.loc) {
+      return;
+    }
     if (target.loc.start.offset > first.loc.start.offset) {
       target.loc.start = first.loc.start;
     }
@@ -372,7 +379,7 @@ AST.prototype.resolvePrecedence = function (result, parser) {
   if (result.kind === "call") {
     // including what argument into location
     this.resolveLocations(result, result.what, result, parser);
-  } else if (result.kind === "propertylookup" || result.kind === "staticlookup" || result.kind === "offsetlookup" && result.offset) {
+  } else if (result.kind === "propertylookup" || result.kind === "nullsafepropertylookup" || result.kind === "staticlookup" || result.kind === "offsetlookup" && result.offset) {
     // including what argument into location
     this.resolveLocations(result, result.what, result.offset, parser);
   } else if (result.kind === "bin") {
@@ -423,14 +430,18 @@ AST.prototype.resolvePrecedence = function (result, parser) {
   } else if (result.kind === "unary") {
     // https://github.com/glayzzle/php-parser/issues/75
     if (result.what && !result.what.parenthesizedExpression) {
-      // unary precedence is always lower
       if (result.what.kind === "bin") {
-        buffer = result.what;
-        result.what = result.what.left;
-        this.swapLocations(result, result, result.what, parser);
-        buffer.left = this.resolvePrecedence(result, parser);
-        this.swapLocations(buffer, buffer.left, buffer.right, parser);
-        result = buffer;
+        // use the unary-specific precedence (u-, u+, u~) which is higher than binary - and +
+        lLevel = AST.precedence["u" + result.type] || AST.precedence[result.type];
+        rLevel = AST.precedence[result.what.type];
+        if (lLevel && rLevel && rLevel < lLevel) {
+          buffer = result.what;
+          result.what = result.what.left;
+          this.swapLocations(result, result, result.what, parser);
+          buffer.left = this.resolvePrecedence(result, parser);
+          this.swapLocations(buffer, buffer.left, buffer.right, parser);
+          result = buffer;
+        }
       } else if (result.what.kind === "retif") {
         buffer = result.what;
         result.what = result.what.test;
@@ -487,17 +498,25 @@ AST.prototype.prepare = function (kind, docs, parser) {
   }
   var self = this;
   // returns the node
-  var result = function result() {
-    var location = null;
+  var _result = function result() {
     var args = Array.prototype.slice.call(arguments);
     args.push(docs);
     if (self.withPositions || self.withSource) {
+      var nodeStart = start;
+      var nodeEnd = new Position(parser.prev[0], parser.prev[1], parser.prev[2]);
+      // Fix swapped positions when no tokens are consumed between node() and ()
+      // (e.g. noop node in an empty block that contains only comments)
+      if (nodeStart.offset > nodeEnd.offset) {
+        var tmp = nodeStart;
+        nodeStart = nodeEnd;
+        nodeEnd = tmp;
+      }
       var src = null;
       if (self.withSource) {
-        src = parser.lexer._input.substring(start.offset, parser.prev[2]);
+        src = parser.lexer._input.substring(nodeStart.offset, nodeEnd.offset);
       }
       // if with source, need location on swapLocations function
-      location = new Location(src, start, new Position(parser.prev[0], parser.prev[1], parser.prev[2]));
+      var location = new Location(src, nodeStart, nodeEnd);
       // last argument is always the location
       args.push(location);
     }
@@ -512,17 +531,17 @@ AST.prototype.prepare = function (kind, docs, parser) {
     }
     var astNode = Object.create(node.prototype);
     node.apply(astNode, args);
-    result.instance = astNode;
+    _result.instance = astNode;
     /* istanbul ignore next */
-    if (result.trailingComments) {
+    if (_result.trailingComments) {
       // buffer of trailingComments
-      astNode.trailingComments = result.trailingComments;
+      astNode.trailingComments = _result.trailingComments;
     }
-    if (typeof result.postBuild === "function") {
-      result.postBuild(astNode);
+    if (typeof _result.postBuild === "function") {
+      _result.postBuild(astNode);
     }
     if (parser.debug) {
-      delete self.stack[result.stackUid];
+      delete self.stack[_result.stackUid];
     }
     return self.resolvePrecedence(astNode, parser);
   };
@@ -535,7 +554,7 @@ AST.prototype.prepare = function (kind, docs, parser) {
       position: start,
       stack: new Error().stack.split("\n").slice(3, 5)
     };
-    result.stackUid = this.stackUid;
+    _result.stackUid = this.stackUid;
   }
 
   /**
@@ -543,12 +562,12 @@ AST.prototype.prepare = function (kind, docs, parser) {
    * @private
    * @param {*} docs
    */
-  result.setTrailingComments = function (docs) {
-    if (result.instance) {
+  _result.setTrailingComments = function (docs) {
+    if (_result.instance) {
       // already created
-      result.instance.setTrailingComments(docs);
+      _result.instance.setTrailingComments(docs);
     } else {
-      result.trailingComments = docs;
+      _result.trailingComments = docs;
     }
   };
 
@@ -557,7 +576,7 @@ AST.prototype.prepare = function (kind, docs, parser) {
    * @private
    * @param {*} target
    */
-  result.destroy = function (target) {
+  _result.destroy = function (target) {
     if (docs) {
       // release current docs stack
       if (target) {
@@ -571,10 +590,10 @@ AST.prototype.prepare = function (kind, docs, parser) {
       }
     }
     if (parser.debug) {
-      delete self.stack[result.stackUid];
+      delete self.stack[_result.stackUid];
     }
   };
-  return result;
+  return _result;
 };
 AST.prototype.checkNodes = function () {
   var errors = [];
@@ -589,15 +608,15 @@ AST.prototype.checkNodes = function () {
 };
 
 // Define all AST nodes
-[__webpack_require__(1538), __webpack_require__(4253), __webpack_require__(1997), __webpack_require__(1889), __webpack_require__(4923), __webpack_require__(9165), __webpack_require__(4230), __webpack_require__(2325), __webpack_require__(504), __webpack_require__(2271), __webpack_require__(5871), __webpack_require__(1578), __webpack_require__(7521), __webpack_require__(8212), __webpack_require__(1119), __webpack_require__(5178), __webpack_require__(4027), __webpack_require__(5436), __webpack_require__(5411), __webpack_require__(2001), __webpack_require__(6659), __webpack_require__(387), __webpack_require__(408), __webpack_require__(7224), __webpack_require__(6560), __webpack_require__(9036), __webpack_require__(4067), __webpack_require__(2514), __webpack_require__(8014), __webpack_require__(4395), __webpack_require__(4514), __webpack_require__(6129), __webpack_require__(3321), __webpack_require__(3689), __webpack_require__(4199), __webpack_require__(2045), __webpack_require__(4042), __webpack_require__(5886), __webpack_require__(6389), __webpack_require__(1530), __webpack_require__(9317), __webpack_require__(4607), __webpack_require__(358), __webpack_require__(1057), __webpack_require__(7887), __webpack_require__(7752), __webpack_require__(6547), __webpack_require__(6403), __webpack_require__(5851), __webpack_require__(8454), __webpack_require__(7133), __webpack_require__(7298), __webpack_require__(8323), __webpack_require__(9132), __webpack_require__(9522), __webpack_require__(298), __webpack_require__(6602), __webpack_require__(7592), __webpack_require__(679), __webpack_require__(7046), __webpack_require__(7920), __webpack_require__(3110), __webpack_require__(3174), __webpack_require__(8356), __webpack_require__(2633), __webpack_require__(3725), __webpack_require__(2730), __webpack_require__(2450), __webpack_require__(1358), __webpack_require__(8588), __webpack_require__(2895), __webpack_require__(1480), __webpack_require__(368), __webpack_require__(6210), __webpack_require__(9281), __webpack_require__(1771), __webpack_require__(8377), __webpack_require__(5003), __webpack_require__(6340), __webpack_require__(1558), __webpack_require__(3429), __webpack_require__(6966), __webpack_require__(2037), __webpack_require__(1211), __webpack_require__(4847), __webpack_require__(619), __webpack_require__(5182), __webpack_require__(7228), __webpack_require__(2898), __webpack_require__(5037), __webpack_require__(9732), __webpack_require__(8409), __webpack_require__(2941), __webpack_require__(7129), __webpack_require__(2589), __webpack_require__(5228), __webpack_require__(2523), __webpack_require__(8084), __webpack_require__(4398), __webpack_require__(3181), __webpack_require__(8466), __webpack_require__(8062), __webpack_require__(6178), __webpack_require__(7264), __webpack_require__(2379), __webpack_require__(3693), __webpack_require__(7880), __webpack_require__(6520), __webpack_require__(3656), __webpack_require__(7886), __webpack_require__(41), __webpack_require__(288), __webpack_require__(8789)].forEach(function (ctor) {
+[__webpack_require__(3160), __webpack_require__(1654), __webpack_require__(1240), __webpack_require__(3979), __webpack_require__(5553), __webpack_require__(2207), __webpack_require__(2916), __webpack_require__(4628), __webpack_require__(7509), __webpack_require__(2906), __webpack_require__(5723), __webpack_require__(7561), __webpack_require__(6473), __webpack_require__(9626), __webpack_require__(4782), __webpack_require__(8477), __webpack_require__(5045), __webpack_require__(900), __webpack_require__(4824), __webpack_require__(1020), __webpack_require__(9847), __webpack_require__(2790), __webpack_require__(1333), __webpack_require__(2112), __webpack_require__(9960), __webpack_require__(8533), __webpack_require__(5947), __webpack_require__(7786), __webpack_require__(5436), __webpack_require__(1136), __webpack_require__(380), __webpack_require__(6129), __webpack_require__(9723), __webpack_require__(5125), __webpack_require__(9632), __webpack_require__(4300), __webpack_require__(1515), __webpack_require__(3411), __webpack_require__(9781), __webpack_require__(839), __webpack_require__(8374), __webpack_require__(9754), __webpack_require__(4251), __webpack_require__(6553), __webpack_require__(8630), __webpack_require__(9786), __webpack_require__(9742), __webpack_require__(1234), __webpack_require__(6), __webpack_require__(8861), __webpack_require__(7860), __webpack_require__(9834), __webpack_require__(2724), __webpack_require__(6025), __webpack_require__(2687), __webpack_require__(7633), __webpack_require__(5514), __webpack_require__(7427), __webpack_require__(1122), __webpack_require__(7256), __webpack_require__(7416), __webpack_require__(8140), __webpack_require__(6258), __webpack_require__(9474), __webpack_require__(6827), __webpack_require__(4427), __webpack_require__(4065), __webpack_require__(4297), __webpack_require__(5859), __webpack_require__(6985), __webpack_require__(9302), __webpack_require__(8212), __webpack_require__(864), __webpack_require__(8268), __webpack_require__(7190), __webpack_require__(8519), __webpack_require__(4835), __webpack_require__(2056), __webpack_require__(4838), __webpack_require__(7869), __webpack_require__(1908), __webpack_require__(4863), __webpack_require__(170), __webpack_require__(1091), __webpack_require__(8276), __webpack_require__(1842), __webpack_require__(5739), __webpack_require__(1274), __webpack_require__(4352), __webpack_require__(9672), __webpack_require__(711), __webpack_require__(1231), __webpack_require__(1865), __webpack_require__(1102), __webpack_require__(7472), __webpack_require__(6133), __webpack_require__(1197), __webpack_require__(6649), __webpack_require__(1837), __webpack_require__(2277), __webpack_require__(8010), __webpack_require__(7579), __webpack_require__(3460), __webpack_require__(2702), __webpack_require__(514), __webpack_require__(5684), __webpack_require__(8019), __webpack_require__(7721), __webpack_require__(4369), __webpack_require__(40), __webpack_require__(4919), __webpack_require__(7676), __webpack_require__(2596), __webpack_require__(6744)].forEach(function (ctor) {
   AST.prototype[ctor.kind] = ctor;
 });
 module.exports = AST;
 
-/***/ }),
+/***/ },
 
-/***/ 1538:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 3160
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -606,7 +625,7 @@ module.exports = AST;
  */
 
 
-var Expr = __webpack_require__(1530);
+var Expr = __webpack_require__(839);
 var KIND = "array";
 
 /**
@@ -641,10 +660,10 @@ module.exports = Expr["extends"](KIND, function Array(shortForm, items, docs, lo
   this.shortForm = shortForm;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4253:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1654
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -653,7 +672,7 @@ module.exports = Expr["extends"](KIND, function Array(shortForm, items, docs, lo
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "arrowfunc";
 
 /**
@@ -678,10 +697,10 @@ module.exports = Expression["extends"](KIND, function Closure(args, byref, body,
   this.isStatic = isStatic || false;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1997:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1240
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -690,7 +709,7 @@ module.exports = Expression["extends"](KIND, function Closure(args, byref, body,
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "assign";
 
 /**
@@ -709,10 +728,10 @@ module.exports = Expression["extends"](KIND, function Assign(left, right, operat
   this.operator = operator;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1889:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 3979
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -721,7 +740,7 @@ module.exports = Expression["extends"](KIND, function Assign(left, right, operat
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "assignref";
 
 /**
@@ -731,7 +750,6 @@ var KIND = "assignref";
  * @extends {Expression}
  * @property {Expression} left
  * @property {Expression} right
- * @property {String} operator
  */
 module.exports = Expression["extends"](KIND, function AssignRef(left, right, docs, location) {
   Expression.apply(this, [KIND, docs, location]);
@@ -739,10 +757,10 @@ module.exports = Expression["extends"](KIND, function AssignRef(left, right, doc
   this.right = right;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 9165:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2207
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -751,7 +769,7 @@ module.exports = Expression["extends"](KIND, function AssignRef(left, right, doc
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "attrgroup";
 
 /**
@@ -766,10 +784,10 @@ module.exports = Node["extends"](KIND, function AttrGroup(attrs, docs, location)
   this.attrs = attrs || [];
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4923:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5553
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -778,7 +796,7 @@ module.exports = Node["extends"](KIND, function AttrGroup(attrs, docs, location)
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "attribute";
 
 /**
@@ -795,10 +813,10 @@ module.exports = Node["extends"](KIND, function Attribute(name, args, docs, loca
   this.args = args;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4230:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2916
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -807,7 +825,7 @@ module.exports = Node["extends"](KIND, function Attribute(name, args, docs, loca
  */
 
 
-var Operation = __webpack_require__(6210);
+var Operation = __webpack_require__(8268);
 var KIND = "bin";
 /**
  * Binary operations
@@ -825,10 +843,10 @@ module.exports = Operation["extends"](KIND, function Bin(type, left, right, docs
   this.right = right;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2325:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4628
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -837,7 +855,7 @@ module.exports = Operation["extends"](KIND, function Bin(type, left, right, docs
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "block";
 
 /**
@@ -852,10 +870,10 @@ module.exports = Statement["extends"](KIND, function Block(kind, children, docs,
   this.children = children.filter(Boolean);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 504:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7509
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -864,7 +882,7 @@ module.exports = Statement["extends"](KIND, function Block(kind, children, docs,
  */
 
 
-var Literal = __webpack_require__(6602);
+var Literal = __webpack_require__(5514);
 var KIND = "boolean";
 
 /**
@@ -878,10 +896,10 @@ module.exports = Literal["extends"](KIND, function Boolean(value, raw, docs, loc
   Literal.apply(this, [KIND, value, raw, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2271:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2906
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -890,7 +908,7 @@ module.exports = Literal["extends"](KIND, function Boolean(value, raw, docs, loc
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "break";
 
 /**
@@ -905,10 +923,10 @@ module.exports = Statement["extends"](KIND, function Break(level, docs, location
   this.level = level;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 5871:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5723
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -917,7 +935,7 @@ module.exports = Statement["extends"](KIND, function Break(level, docs, location
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "byref";
 
 /**
@@ -932,10 +950,10 @@ module.exports = Expression["extends"](KIND, function ByRef(what, docs, location
   this.what = what;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1578:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7561
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -944,7 +962,7 @@ module.exports = Expression["extends"](KIND, function ByRef(what, docs, location
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "call";
 
 /**
@@ -961,10 +979,10 @@ module.exports = Expression["extends"](KIND, function Call(what, args, docs, loc
   this.arguments = args;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7521:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6473
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -973,7 +991,7 @@ module.exports = Expression["extends"](KIND, function Call(what, args, docs, loc
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "case";
 
 /**
@@ -990,10 +1008,10 @@ module.exports = Statement["extends"](KIND, function Case(test, body, docs, loca
   this.body = body;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8212:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9626
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1002,7 +1020,7 @@ module.exports = Statement["extends"](KIND, function Case(test, body, docs, loca
  */
 
 
-var Operation = __webpack_require__(6210);
+var Operation = __webpack_require__(8268);
 var KIND = "cast";
 
 /**
@@ -1021,10 +1039,10 @@ module.exports = Operation["extends"](KIND, function Cast(type, raw, expr, docs,
   this.expr = expr;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1119:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4782
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1033,7 +1051,7 @@ module.exports = Operation["extends"](KIND, function Cast(type, raw, expr, docs,
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "catch";
 
 /**
@@ -1053,10 +1071,10 @@ module.exports = Statement["extends"](KIND, function Catch(body, what, variable,
   this.variable = variable;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 5178:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8477
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1065,7 +1083,7 @@ module.exports = Statement["extends"](KIND, function Catch(body, what, variable,
  */
 
 
-var Declaration = __webpack_require__(9036);
+var Declaration = __webpack_require__(8533);
 var KIND = "class";
 
 /**
@@ -1092,10 +1110,10 @@ module.exports = Declaration["extends"](KIND, function Class(name, ext, impl, bo
   this.parseFlags(flags);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4027:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5045
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1104,7 +1122,7 @@ module.exports = Declaration["extends"](KIND, function Class(name, ext, impl, bo
  */
 
 
-var ConstantStatement = __webpack_require__(7224);
+var ConstantStatement = __webpack_require__(2112);
 var KIND = "classconstant";
 var IS_UNDEFINED = "";
 var IS_PUBLIC = "public";
@@ -1117,12 +1135,16 @@ var IS_PRIVATE = "private";
  * @memberOf module:php-parser
  * @extends {ConstantStatement}
  * @property {string} visibility
- * @property {bool} final
+ * @property {boolean} final
+ * @property {boolean} nullable
+ * @property {TypeReference|IntersectionType|UnionType|null} type
  * @property {AttrGroup[]} attrGroups
  */
-var ClassConstant = ConstantStatement["extends"](KIND, function ClassConstant(kind, constants, flags, attrGroups, docs, location) {
+var ClassConstant = ConstantStatement["extends"](KIND, function ClassConstant(kind, constants, flags, nullable, type, attrGroups, docs, location) {
   ConstantStatement.apply(this, [kind || KIND, constants, docs, location]);
   this.parseFlags(flags);
+  this.nullable = nullable;
+  this.type = type;
   this.attrGroups = attrGroups;
 });
 
@@ -1135,26 +1157,27 @@ var ClassConstant = ConstantStatement["extends"](KIND, function ClassConstant(ki
  * @return {void}
  */
 ClassConstant.prototype.parseFlags = function (flags) {
-  if (flags[0] === -1) {
+  var getVis = flags[0][0];
+  if (getVis === -1) {
     this.visibility = IS_UNDEFINED;
-  } else if (flags[0] === null) {
+  } else if (getVis === null) {
     /* istanbul ignore next */
     this.visibility = null;
-  } else if (flags[0] === 0) {
+  } else if (getVis === 0) {
     this.visibility = IS_PUBLIC;
-  } else if (flags[0] === 1) {
+  } else if (getVis === 1) {
     this.visibility = IS_PROTECTED;
-  } else if (flags[0] === 2) {
+  } else if (getVis === 2) {
     this.visibility = IS_PRIVATE;
   }
   this["final"] = flags[2] === 2;
 };
 module.exports = ClassConstant;
 
-/***/ }),
+/***/ },
 
-/***/ 5436:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 900
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1163,7 +1186,7 @@ module.exports = ClassConstant;
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "clone";
 
 /**
@@ -1172,16 +1195,20 @@ var KIND = "clone";
  * @memberOf module:php-parser
  * @extends {Expression}
  * @property {Expression} what
+ * @property {Expression|null} properties
  */
-module.exports = Expression["extends"](KIND, function Clone(what, docs, location) {
+module.exports = Expression["extends"](KIND, function Clone(what, properties, docs, location) {
   Expression.apply(this, [KIND, docs, location]);
   this.what = what;
+  if (properties) {
+    this.properties = properties;
+  }
 });
 
-/***/ }),
+/***/ },
 
-/***/ 5411:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4824
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1190,7 +1217,7 @@ module.exports = Expression["extends"](KIND, function Clone(what, docs, location
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "closure";
 
 /**
@@ -1219,10 +1246,10 @@ module.exports = Expression["extends"](KIND, function Closure(args, byref, uses,
   this.attrGroups = [];
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2001:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1020
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1231,7 +1258,7 @@ module.exports = Expression["extends"](KIND, function Closure(args, byref, uses,
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 
 /**
  * Abstract documentation node (ComentLine or CommentBlock)
@@ -1245,10 +1272,10 @@ module.exports = Node["extends"]("comment", function Comment(kind, value, docs, 
   this.value = value;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6659:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9847
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1257,7 +1284,7 @@ module.exports = Node["extends"]("comment", function Comment(kind, value, docs, 
  */
 
 
-var Comment = __webpack_require__(2001);
+var Comment = __webpack_require__(1020);
 var KIND = "commentblock";
 
 /**
@@ -1270,10 +1297,10 @@ module.exports = Comment["extends"](KIND, function CommentBlock(value, docs, loc
   Comment.apply(this, [KIND, value, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 387:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2790
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1282,7 +1309,7 @@ module.exports = Comment["extends"](KIND, function CommentBlock(value, docs, loc
  */
 
 
-var Comment = __webpack_require__(2001);
+var Comment = __webpack_require__(1020);
 var KIND = "commentline";
 
 /**
@@ -1295,10 +1322,10 @@ module.exports = Comment["extends"](KIND, function CommentLine(value, docs, loca
   Comment.apply(this, [KIND, value, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 408:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1333
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1307,7 +1334,7 @@ module.exports = Comment["extends"](KIND, function CommentLine(value, docs, loca
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "constant";
 
 /**
@@ -1324,10 +1351,10 @@ module.exports = Node["extends"](KIND, function Constant(name, value, docs, loca
   this.value = value;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7224:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2112
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1336,7 +1363,7 @@ module.exports = Node["extends"](KIND, function Constant(name, value, docs, loca
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "constantstatement";
 
 /**
@@ -1351,10 +1378,10 @@ module.exports = Statement["extends"](KIND, function ConstantStatement(kind, con
   this.constants = constants;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6560:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9960
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1363,7 +1390,7 @@ module.exports = Statement["extends"](KIND, function ConstantStatement(kind, con
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "continue";
 
 /**
@@ -1378,10 +1405,10 @@ module.exports = Statement["extends"](KIND, function Continue(level, docs, locat
   this.level = level;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 9036:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8533
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1390,12 +1417,19 @@ module.exports = Statement["extends"](KIND, function Continue(level, docs, locat
  */
 
 
-var Statement = __webpack_require__(2898);
+function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
+var Statement = __webpack_require__(9672);
 var KIND = "declaration";
 var IS_UNDEFINED = "";
 var IS_PUBLIC = "public";
 var IS_PROTECTED = "protected";
 var IS_PRIVATE = "private";
+var VISIBILITY_MAP = [IS_PUBLIC, IS_PROTECTED, IS_PRIVATE];
 
 /**
  * A declaration statement (function, class, interface...)
@@ -1403,6 +1437,7 @@ var IS_PRIVATE = "private";
  * @memberOf module:php-parser
  * @extends {Statement}
  * @property {Identifier|string} name
+ * @property {string|null} visibilitySet
  */
 var Declaration = Statement["extends"](KIND, function Declaration(kind, name, docs, location) {
   Statement.apply(this, [kind || KIND, docs, location]);
@@ -1422,27 +1457,27 @@ Declaration.prototype.parseFlags = function (flags) {
   this.isFinal = flags[2] === 2;
   this.isReadonly = flags[3] === 1;
   if (this.kind !== "class") {
-    if (flags[0] === -1) {
+    var _flags$ = _slicedToArray(flags[0], 2),
+      getVis = _flags$[0],
+      setVis = _flags$[1];
+    if (getVis === -1) {
       this.visibility = IS_UNDEFINED;
-    } else if (flags[0] === null) {
+    } else if (getVis === null) {
       /* istanbul ignore next */
       this.visibility = null;
-    } else if (flags[0] === 0) {
-      this.visibility = IS_PUBLIC;
-    } else if (flags[0] === 1) {
-      this.visibility = IS_PROTECTED;
-    } else if (flags[0] === 2) {
-      this.visibility = IS_PRIVATE;
+    } else {
+      this.visibility = VISIBILITY_MAP[getVis];
     }
     this.isStatic = flags[1] === 1;
+    this.visibilitySet = setVis !== -1 ? VISIBILITY_MAP[setVis] : null;
   }
 };
 module.exports = Declaration;
 
-/***/ }),
+/***/ },
 
-/***/ 4067:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5947
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1451,7 +1486,7 @@ module.exports = Declaration;
  */
 
 
-var Block = __webpack_require__(2325);
+var Block = __webpack_require__(4628);
 var KIND = "declare";
 
 /**
@@ -1512,10 +1547,10 @@ Declare.MODE_BLOCK = "block";
 Declare.MODE_NONE = "none";
 module.exports = Declare;
 
-/***/ }),
+/***/ },
 
-/***/ 2514:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7786
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1524,7 +1559,7 @@ module.exports = Declare;
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "declaredirective";
 
 /**
@@ -1541,10 +1576,10 @@ module.exports = Node["extends"](KIND, function DeclareDirective(key, value, doc
   this.value = value;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8014:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5436
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1553,7 +1588,7 @@ module.exports = Node["extends"](KIND, function DeclareDirective(key, value, doc
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "do";
 
 /**
@@ -1570,10 +1605,10 @@ module.exports = Statement["extends"](KIND, function Do(test, body, docs, locati
   this.body = body;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4395:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1136
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1582,7 +1617,7 @@ module.exports = Statement["extends"](KIND, function Do(test, body, docs, locati
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "echo";
 
 /**
@@ -1599,10 +1634,10 @@ module.exports = Statement["extends"](KIND, function Echo(expressions, shortForm
   this.expressions = expressions;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4514:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 380
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1611,7 +1646,7 @@ module.exports = Statement["extends"](KIND, function Echo(expressions, shortForm
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "empty";
 
 /**
@@ -1619,16 +1654,17 @@ var KIND = "empty";
  * @constructor Empty
  * @memberOf module:php-parser
  * @extends {Expression}
+ * @property {Expression} expression
  */
 module.exports = Expression["extends"](KIND, function Empty(expression, docs, location) {
   Expression.apply(this, [KIND, docs, location]);
   this.expression = expression;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6129:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6129
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1637,7 +1673,7 @@ module.exports = Expression["extends"](KIND, function Empty(expression, docs, lo
  */
 
 
-var Literal = __webpack_require__(6602);
+var Literal = __webpack_require__(5514);
 var KIND = "encapsed";
 
 /**
@@ -1702,10 +1738,10 @@ Encapsed.TYPE_HEREDOC = "heredoc";
 Encapsed.TYPE_OFFSET = "offset";
 module.exports = Encapsed;
 
-/***/ }),
+/***/ },
 
-/***/ 3321:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9723
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1714,7 +1750,7 @@ module.exports = Encapsed;
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "encapsedpart";
 
 /**
@@ -1733,10 +1769,10 @@ module.exports = Expression["extends"](KIND, function EncapsedPart(expression, s
   this.curly = curly;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 3689:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5125
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1745,7 +1781,7 @@ module.exports = Expression["extends"](KIND, function EncapsedPart(expression, s
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "entry";
 
 /**
@@ -1766,10 +1802,10 @@ module.exports = Expression["extends"](KIND, function Entry(key, value, byRef, u
   this.unpack = unpack;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4199:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9632
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1778,7 +1814,7 @@ module.exports = Expression["extends"](KIND, function Entry(key, value, byRef, u
  */
 
 
-var Declaration = __webpack_require__(9036);
+var Declaration = __webpack_require__(8533);
 var KIND = "enum";
 
 /**
@@ -1799,10 +1835,10 @@ module.exports = Declaration["extends"](KIND, function Enum(name, valueType, imp
   this.attrGroups = [];
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2045:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4300
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1811,7 +1847,7 @@ module.exports = Declaration["extends"](KIND, function Enum(name, valueType, imp
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "enumcase";
 
 /**
@@ -1828,10 +1864,10 @@ module.exports = Node["extends"](KIND, function EnumCase(name, value, docs, loca
   this.value = value;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4042:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1515
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1840,7 +1876,7 @@ module.exports = Node["extends"](KIND, function EnumCase(name, value, docs, loca
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "error";
 
 /**
@@ -1861,10 +1897,10 @@ module.exports = Node["extends"](KIND, function Error(message, token, line, expe
   this.expected = expected;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 5886:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 3411
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1873,7 +1909,7 @@ module.exports = Node["extends"](KIND, function Error(message, token, line, expe
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "eval";
 
 /**
@@ -1888,10 +1924,10 @@ module.exports = Expression["extends"](KIND, function Eval(source, docs, locatio
   this.source = source;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6389:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9781
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1900,7 +1936,7 @@ module.exports = Expression["extends"](KIND, function Eval(source, docs, locatio
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "exit";
 
 /**
@@ -1917,10 +1953,10 @@ module.exports = Expression["extends"](KIND, function Exit(expression, useDie, d
   this.useDie = useDie;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1530:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 839
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1929,7 +1965,7 @@ module.exports = Expression["extends"](KIND, function Exit(expression, useDie, d
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "expression";
 
 /**
@@ -1943,10 +1979,10 @@ module.exports = Node["extends"](KIND, function Expression(kind, docs, location)
   Node.apply(this, [kind || KIND, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 9317:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8374
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1955,7 +1991,7 @@ module.exports = Node["extends"](KIND, function Expression(kind, docs, location)
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "expressionstatement";
 
 /**
@@ -1970,10 +2006,10 @@ module.exports = Statement["extends"](KIND, function ExpressionStatement(expr, d
   this.expression = expr;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4607:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9754
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -1982,7 +2018,7 @@ module.exports = Statement["extends"](KIND, function ExpressionStatement(expr, d
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "for";
 
 /**
@@ -2006,10 +2042,10 @@ module.exports = Statement["extends"](KIND, function For(init, test, increment, 
   this.body = body;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 358:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4251
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2018,7 +2054,7 @@ module.exports = Statement["extends"](KIND, function For(init, test, increment, 
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "foreach";
 
 /**
@@ -2042,10 +2078,10 @@ module.exports = Statement["extends"](KIND, function Foreach(source, key, value,
   this.body = body;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1057:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6553
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2054,7 +2090,7 @@ module.exports = Statement["extends"](KIND, function Foreach(source, key, value,
  */
 
 
-var Declaration = __webpack_require__(9036);
+var Declaration = __webpack_require__(8533);
 var KIND = "function";
 
 /**
@@ -2079,10 +2115,10 @@ module.exports = Declaration["extends"](KIND, function _Function(name, args, byr
   this.attrGroups = [];
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7887:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8630
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2091,7 +2127,7 @@ module.exports = Declaration["extends"](KIND, function _Function(name, args, byr
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "global";
 
 /**
@@ -2106,10 +2142,10 @@ module.exports = Statement["extends"](KIND, function Global(items, docs, locatio
   this.items = items;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7752:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9786
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2118,7 +2154,7 @@ module.exports = Statement["extends"](KIND, function Global(items, docs, locatio
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "goto";
 
 /**
@@ -2134,10 +2170,10 @@ module.exports = Statement["extends"](KIND, function Goto(label, docs, location)
   this.label = label;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6547:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9742
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2146,7 +2182,7 @@ module.exports = Statement["extends"](KIND, function Goto(label, docs, location)
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "halt";
 
 /**
@@ -2162,10 +2198,10 @@ module.exports = Statement["extends"](KIND, function Halt(after, docs, location)
   this.after = after;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6403:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1234
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2174,7 +2210,7 @@ module.exports = Statement["extends"](KIND, function Halt(after, docs, location)
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "identifier";
 
 /**
@@ -2190,10 +2226,10 @@ var Identifier = Node["extends"](KIND, function Identifier(name, docs, location)
 });
 module.exports = Identifier;
 
-/***/ }),
+/***/ },
 
-/***/ 5851:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2202,7 +2238,7 @@ module.exports = Identifier;
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "if";
 
 /**
@@ -2223,10 +2259,10 @@ module.exports = Statement["extends"](KIND, function If(test, body, alternate, s
   this.shortForm = shortForm;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8454:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8861
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2235,7 +2271,7 @@ module.exports = Statement["extends"](KIND, function If(test, body, alternate, s
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "include";
 
 /**
@@ -2254,10 +2290,10 @@ module.exports = Expression["extends"](KIND, function Include(once, require, tar
   this.target = target;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7133:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7860
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2266,7 +2302,7 @@ module.exports = Expression["extends"](KIND, function Include(once, require, tar
  */
 
 
-var Literal = __webpack_require__(6602);
+var Literal = __webpack_require__(5514);
 var KIND = "inline";
 
 /**
@@ -2280,10 +2316,10 @@ module.exports = Literal["extends"](KIND, function Inline(value, raw, docs, loca
   Literal.apply(this, [KIND, value, raw, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7298:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9834
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2292,7 +2328,7 @@ module.exports = Literal["extends"](KIND, function Inline(value, raw, docs, loca
  */
 
 
-var Declaration = __webpack_require__(9036);
+var Declaration = __webpack_require__(8533);
 var KIND = "interface";
 
 /**
@@ -2311,10 +2347,10 @@ module.exports = Declaration["extends"](KIND, function Interface(name, ext, body
   this.attrGroups = attrGroups;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8323:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2724
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2323,7 +2359,7 @@ module.exports = Declaration["extends"](KIND, function Interface(name, ext, body
  */
 
 
-var Declaration = __webpack_require__(9036);
+var Declaration = __webpack_require__(8533);
 var KIND = "intersectiontype";
 
 /**
@@ -2338,10 +2374,10 @@ module.exports = Declaration["extends"](KIND, function IntersectionType(types, d
   this.types = types;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 9132:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6025
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2350,7 +2386,7 @@ module.exports = Declaration["extends"](KIND, function IntersectionType(types, d
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "isset";
 
 /**
@@ -2358,16 +2394,17 @@ var KIND = "isset";
  * @constructor Isset
  * @memberOf module:php-parser
  * @extends {Expression}
+ * @property {Expression[]} variables
  */
 module.exports = Expression["extends"](KIND, function Isset(variables, docs, location) {
   Expression.apply(this, [KIND, docs, location]);
   this.variables = variables;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 9522:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2687
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2376,7 +2413,7 @@ module.exports = Expression["extends"](KIND, function Isset(variables, docs, loc
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "label";
 
 /**
@@ -2391,10 +2428,10 @@ module.exports = Statement["extends"](KIND, function Label(name, docs, location)
   this.name = name;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 298:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7633
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2403,7 +2440,7 @@ module.exports = Statement["extends"](KIND, function Label(name, docs, location)
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "list";
 
 /**
@@ -2420,10 +2457,10 @@ module.exports = Expression["extends"](KIND, function List(items, shortForm, doc
   this.shortForm = shortForm;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6602:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5514
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2432,7 +2469,7 @@ module.exports = Expression["extends"](KIND, function List(items, shortForm, doc
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "literal";
 
 /**
@@ -2451,10 +2488,10 @@ module.exports = Expression["extends"](KIND, function Literal(kind, value, raw, 
   }
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1907:
-/***/ ((module) => {
+/***/ 4778
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2478,10 +2515,10 @@ var Location = function Location(source, start, end) {
 };
 module.exports = Location;
 
-/***/ }),
+/***/ },
 
-/***/ 7592:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7427
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2490,7 +2527,7 @@ module.exports = Location;
  */
 
 
-var Expr = __webpack_require__(1530);
+var Expr = __webpack_require__(839);
 var KIND = "lookup";
 
 /**
@@ -2507,10 +2544,10 @@ module.exports = Expr["extends"](KIND, function Lookup(kind, what, offset, docs,
   this.offset = offset;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 679:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1122
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2519,7 +2556,7 @@ module.exports = Expr["extends"](KIND, function Lookup(kind, what, offset, docs,
  */
 
 
-var Literal = __webpack_require__(6602);
+var Literal = __webpack_require__(5514);
 var KIND = "magic";
 
 /**
@@ -2532,10 +2569,10 @@ module.exports = Literal["extends"](KIND, function Magic(value, raw, docs, locat
   Literal.apply(this, [KIND, value, raw, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7046:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7256
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2544,7 +2581,7 @@ module.exports = Literal["extends"](KIND, function Magic(value, raw, docs, locat
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "match";
 
 /**
@@ -2561,10 +2598,10 @@ module.exports = Expression["extends"](KIND, function Match(cond, arms, docs, lo
   this.arms = arms;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7920:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7416
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2573,7 +2610,7 @@ module.exports = Expression["extends"](KIND, function Match(cond, arms, docs, lo
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "matcharm";
 
 /**
@@ -2590,10 +2627,10 @@ module.exports = Expression["extends"](KIND, function MatchArm(conds, body, docs
   this.body = body;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 3110:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8140
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2602,7 +2639,7 @@ module.exports = Expression["extends"](KIND, function MatchArm(conds, body, docs
  */
 
 
-var Function_ = __webpack_require__(1057);
+var Function_ = __webpack_require__(6553);
 var KIND = "method";
 
 /**
@@ -2620,10 +2657,10 @@ module.exports = Function_["extends"](KIND, function Method() {
   this.kind = KIND;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 3174:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6258
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2632,7 +2669,7 @@ module.exports = Function_["extends"](KIND, function Method() {
  */
 
 
-var Reference = __webpack_require__(1211);
+var Reference = __webpack_require__(8276);
 var KIND = "name";
 
 /**
@@ -2677,10 +2714,10 @@ Name.FULL_QUALIFIED_NAME = "fqn";
 Name.RELATIVE_NAME = "rn";
 module.exports = Name;
 
-/***/ }),
+/***/ },
 
-/***/ 2633:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6827
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2689,7 +2726,7 @@ module.exports = Name;
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "namedargument";
 
 /**
@@ -2707,10 +2744,10 @@ module.exports = Expression["extends"](KIND, function namedargument(name, value,
   this.value = value;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8356:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9474
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2719,7 +2756,7 @@ module.exports = Expression["extends"](KIND, function namedargument(name, value,
  */
 
 
-var Block = __webpack_require__(2325);
+var Block = __webpack_require__(4628);
 var KIND = "namespace";
 
 /**
@@ -2736,10 +2773,10 @@ module.exports = Block["extends"](KIND, function Namespace(name, children, withB
   this.withBrackets = withBrackets || false;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 3725:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4427
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2748,7 +2785,7 @@ module.exports = Block["extends"](KIND, function Namespace(name, children, withB
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "new";
 
 /**
@@ -2765,10 +2802,10 @@ module.exports = Expression["extends"](KIND, function New(what, args, docs, loca
   this.arguments = args;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2730:
-/***/ ((module) => {
+/***/ 4065
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2870,10 +2907,10 @@ Node["extends"] = function (type, constructor) {
 };
 module.exports = Node;
 
-/***/ }),
+/***/ },
 
-/***/ 2450:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4297
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2882,7 +2919,7 @@ module.exports = Node;
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "noop";
 
 /**
@@ -2896,10 +2933,10 @@ module.exports = Node["extends"](KIND, function Noop(docs, location) {
   Node.apply(this, [KIND, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1358:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5859
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2908,7 +2945,7 @@ module.exports = Node["extends"](KIND, function Noop(docs, location) {
  */
 
 
-var Literal = __webpack_require__(6602);
+var Literal = __webpack_require__(5514);
 var KIND = "nowdoc";
 
 /**
@@ -2925,10 +2962,10 @@ module.exports = Literal["extends"](KIND, function Nowdoc(value, raw, label, doc
   this.label = label;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8588:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6985
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2937,7 +2974,7 @@ module.exports = Literal["extends"](KIND, function Nowdoc(value, raw, label, doc
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "nullkeyword";
 
 /**
@@ -2951,10 +2988,10 @@ module.exports = Node["extends"](KIND, function NullKeyword(raw, docs, location)
   this.raw = raw;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2895:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9302
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2963,7 +3000,7 @@ module.exports = Node["extends"](KIND, function NullKeyword(raw, docs, location)
  */
 
 
-var Lookup = __webpack_require__(7592);
+var Lookup = __webpack_require__(7427);
 var KIND = "nullsafepropertylookup";
 
 /**
@@ -2976,10 +3013,10 @@ module.exports = Lookup["extends"](KIND, function NullSafePropertyLookup(what, o
   Lookup.apply(this, [KIND, what, offset, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1480:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8212
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -2988,7 +3025,7 @@ module.exports = Lookup["extends"](KIND, function NullSafePropertyLookup(what, o
  */
 
 
-var Literal = __webpack_require__(6602);
+var Literal = __webpack_require__(5514);
 var KIND = "number";
 
 /**
@@ -3002,10 +3039,10 @@ module.exports = Literal["extends"](KIND, function Number(value, raw, docs, loca
   Literal.apply(this, [KIND, value, raw, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 368:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 864
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3014,7 +3051,7 @@ module.exports = Literal["extends"](KIND, function Number(value, raw, docs, loca
  */
 
 
-var Lookup = __webpack_require__(7592);
+var Lookup = __webpack_require__(7427);
 var KIND = "offsetlookup";
 
 /**
@@ -3027,10 +3064,10 @@ module.exports = Lookup["extends"](KIND, function OffsetLookup(what, offset, doc
   Lookup.apply(this, [KIND, what, offset, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6210:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8268
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3039,7 +3076,7 @@ module.exports = Lookup["extends"](KIND, function OffsetLookup(what, offset, doc
  */
 
 
-var Expr = __webpack_require__(1530);
+var Expr = __webpack_require__(839);
 var KIND = "operation";
 
 /**
@@ -3052,10 +3089,10 @@ module.exports = Expr["extends"](KIND, function Operation(kind, docs, location) 
   Expr.apply(this, [kind || KIND, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 9281:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7190
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3064,7 +3101,7 @@ module.exports = Expr["extends"](KIND, function Operation(kind, docs, location) 
  */
 
 
-var Declaration = __webpack_require__(9036);
+var Declaration = __webpack_require__(8533);
 var KIND = "parameter";
 
 /**
@@ -3092,8 +3129,10 @@ var KIND = "parameter";
  * @property {boolean} nullable
  * @property {AttrGroup[]} attrGroups
  * @property {MODIFIER_PUBLIC|MODIFIER_PROTECTED|MODIFIER_PRIVATE} flags
+ * @property {PropertyHook[]} hooks
+ * @property {MODIFIER_PUBLIC|MODIFIER_PROTECTED|MODIFIER_PRIVATE} flagsSet
  */
-module.exports = Declaration["extends"](KIND, function Parameter(name, type, value, isRef, isVariadic, readonly, nullable, flags, docs, location) {
+module.exports = Declaration["extends"](KIND, function Parameter(name, type, value, isRef, isVariadic, readonly, nullable, flags, hooks, flagsSet, docs, location) {
   Declaration.apply(this, [KIND, name, docs, location]);
   this.value = value;
   this.type = type;
@@ -3102,13 +3141,15 @@ module.exports = Declaration["extends"](KIND, function Parameter(name, type, val
   this.readonly = readonly;
   this.nullable = nullable;
   this.flags = flags || 0;
+  this.hooks = hooks || [];
+  this.flagsSet = flagsSet || 0;
   this.attrGroups = [];
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1771:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8519
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3117,7 +3158,7 @@ module.exports = Declaration["extends"](KIND, function Parameter(name, type, val
  */
 
 
-var Reference = __webpack_require__(1211);
+var Reference = __webpack_require__(8276);
 var KIND = "parentreference";
 
 /**
@@ -3132,10 +3173,10 @@ var ParentReference = Reference["extends"](KIND, function ParentReference(raw, d
 });
 module.exports = ParentReference;
 
-/***/ }),
+/***/ },
 
-/***/ 7724:
-/***/ ((module) => {
+/***/ 8822
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3159,10 +3200,10 @@ var Position = function Position(line, column, offset) {
 };
 module.exports = Position;
 
-/***/ }),
+/***/ },
 
-/***/ 8377:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4835
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3171,7 +3212,7 @@ module.exports = Position;
  */
 
 
-var Operation = __webpack_require__(6210);
+var Operation = __webpack_require__(8268);
 var KIND = "post";
 
 /**
@@ -3188,10 +3229,10 @@ module.exports = Operation["extends"](KIND, function Post(type, what, docs, loca
   this.what = what;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 5003:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2056
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3200,7 +3241,7 @@ module.exports = Operation["extends"](KIND, function Post(type, what, docs, loca
  */
 
 
-var Operation = __webpack_require__(6210);
+var Operation = __webpack_require__(8268);
 var KIND = "pre";
 
 /**
@@ -3217,10 +3258,10 @@ module.exports = Operation["extends"](KIND, function Pre(type, what, docs, locat
   this.what = what;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6340:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4838
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3229,7 +3270,7 @@ module.exports = Operation["extends"](KIND, function Pre(type, what, docs, locat
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "print";
 
 /**
@@ -3237,16 +3278,17 @@ var KIND = "print";
  * @constructor Print
  * @memberOf module:php-parser
  * @extends {Expression}
+ * @property {Expression} expression
  */
 module.exports = Expression["extends"](KIND, function Print(expression, docs, location) {
   Expression.apply(this, [KIND, docs, location]);
   this.expression = expression;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1558:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7869
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3255,7 +3297,7 @@ module.exports = Expression["extends"](KIND, function Print(expression, docs, lo
  */
 
 
-var Block = __webpack_require__(2325);
+var Block = __webpack_require__(4628);
 var KIND = "program";
 
 /**
@@ -3278,10 +3320,10 @@ module.exports = Block["extends"](KIND, function Program(children, errors, comme
   }
 });
 
-/***/ }),
+/***/ },
 
-/***/ 3429:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1908
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3290,7 +3332,7 @@ module.exports = Block["extends"](KIND, function Program(children, errors, comme
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "property";
 
 /**
@@ -3304,8 +3346,9 @@ var KIND = "property";
  * @property {boolean} nullable
  * @property {Identifier|Array<Identifier>|null} type
  * @property {AttrGroup[]} attrGroups
+ * @property {PropertyHook[]} hooks
  */
-module.exports = Statement["extends"](KIND, function Property(name, value, readonly, nullable, type, attrGroups, docs, location) {
+module.exports = Statement["extends"](KIND, function Property(name, value, readonly, nullable, type, attrGroups, hooks, docs, location) {
   Statement.apply(this, [KIND, docs, location]);
   this.name = name;
   this.value = value;
@@ -3313,12 +3356,51 @@ module.exports = Statement["extends"](KIND, function Property(name, value, reado
   this.nullable = nullable;
   this.type = type;
   this.attrGroups = attrGroups;
+  this.hooks = hooks || [];
 });
 
-/***/ }),
+/***/ },
 
-/***/ 6966:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4863
+(module, __unused_webpack_exports, __webpack_require__) {
+
+/**
+ * Copyright (C) 2024 Glayzzle (BSD3 License)
+ * @authors https://github.com/glayzzle/php-parser/graphs/contributors
+ * @url http://glayzzle.com
+ */
+
+
+var Node = __webpack_require__(4065);
+var KIND = "propertyhook";
+
+/**
+ * Defines a class property hook getter & setter
+ *
+ * @constructor PropertyHook
+ * @memberOf module:php-parser
+ * @extends {Node}
+ * @property {string} name
+ * @property {Boolean} isFinal
+ * @property {Boolean} byref
+ * @property {Parameter|null} parameter
+ * @property {Block|Expression|null} body
+ * @property {AttrGroup[]} attrGroups
+ */
+module.exports = Node["extends"](KIND, function PropertyHook(name, isFinal, byref, parameter, body, attrGroups, docs, location) {
+  Node.apply(this, [KIND, docs, location]);
+  this.name = name;
+  this.isFinal = isFinal;
+  this.byref = byref;
+  this.parameter = parameter;
+  this.body = body;
+  this.attrGroups = attrGroups || [];
+});
+
+/***/ },
+
+/***/ 170
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3327,7 +3409,7 @@ module.exports = Statement["extends"](KIND, function Property(name, value, reado
  */
 
 
-var Lookup = __webpack_require__(7592);
+var Lookup = __webpack_require__(7427);
 var KIND = "propertylookup";
 
 /**
@@ -3340,10 +3422,10 @@ module.exports = Lookup["extends"](KIND, function PropertyLookup(what, offset, d
   Lookup.apply(this, [KIND, what, offset, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2037:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1091
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3352,12 +3434,19 @@ module.exports = Lookup["extends"](KIND, function PropertyLookup(what, offset, d
  */
 
 
-var Statement = __webpack_require__(2898);
+function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
+var Statement = __webpack_require__(9672);
 var KIND = "propertystatement";
 var IS_UNDEFINED = "";
 var IS_PUBLIC = "public";
 var IS_PROTECTED = "protected";
 var IS_PRIVATE = "private";
+var VISIBILITY_MAP = [IS_PUBLIC, IS_PROTECTED, IS_PRIVATE];
 
 /**
  * Declares a properties into the current scope
@@ -3366,7 +3455,10 @@ var IS_PRIVATE = "private";
  * @extends {Statement}
  * @property {Property[]} properties
  * @property {string|null} visibility
+ * @property {string|null} visibilitySet
  * @property {boolean} isStatic
+ * @property {boolean} isAbstract
+ * @property {boolean} isFinal
  */
 var PropertyStatement = Statement["extends"](KIND, function PropertyStatement(kind, properties, flags, docs, location) {
   Statement.apply(this, [KIND, docs, location]);
@@ -3382,25 +3474,27 @@ var PropertyStatement = Statement["extends"](KIND, function PropertyStatement(ki
  * @return {void}
  */
 PropertyStatement.prototype.parseFlags = function (flags) {
-  if (flags[0] === -1) {
+  var _flags$ = _slicedToArray(flags[0], 2),
+    getVis = _flags$[0],
+    setVis = _flags$[1];
+  if (getVis === -1) {
     this.visibility = IS_UNDEFINED;
-  } else if (flags[0] === null) {
+  } else if (getVis === null) {
     this.visibility = null;
-  } else if (flags[0] === 0) {
-    this.visibility = IS_PUBLIC;
-  } else if (flags[0] === 1) {
-    this.visibility = IS_PROTECTED;
-  } else if (flags[0] === 2) {
-    this.visibility = IS_PRIVATE;
+  } else {
+    this.visibility = VISIBILITY_MAP[getVis];
   }
   this.isStatic = flags[1] === 1;
+  this.isAbstract = flags[2] === 1;
+  this.isFinal = flags[2] === 2;
+  this.visibilitySet = setVis !== -1 ? VISIBILITY_MAP[setVis] : null;
 };
 module.exports = PropertyStatement;
 
-/***/ }),
+/***/ },
 
-/***/ 1211:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8276
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3409,7 +3503,7 @@ module.exports = PropertyStatement;
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "reference";
 
 /**
@@ -3423,10 +3517,10 @@ var Reference = Node["extends"](KIND, function Reference(kind, docs, location) {
 });
 module.exports = Reference;
 
-/***/ }),
+/***/ },
 
-/***/ 4847:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1842
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3435,7 +3529,7 @@ module.exports = Reference;
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "retif";
 
 /**
@@ -3454,10 +3548,10 @@ module.exports = Expression["extends"](KIND, function RetIf(test, trueExpr, fals
   this.falseExpr = falseExpr;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 619:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5739
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3466,7 +3560,7 @@ module.exports = Expression["extends"](KIND, function RetIf(test, trueExpr, fals
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "return";
 
 /**
@@ -3481,10 +3575,10 @@ module.exports = Statement["extends"](KIND, function Return(expr, docs, location
   this.expr = expr;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 5182:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1274
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3493,7 +3587,7 @@ module.exports = Statement["extends"](KIND, function Return(expr, docs, location
  */
 
 
-var Reference = __webpack_require__(1211);
+var Reference = __webpack_require__(8276);
 var KIND = "selfreference";
 
 /**
@@ -3508,10 +3602,10 @@ var SelfReference = Reference["extends"](KIND, function SelfReference(raw, docs,
 });
 module.exports = SelfReference;
 
-/***/ }),
+/***/ },
 
-/***/ 7228:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4352
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3520,7 +3614,7 @@ module.exports = SelfReference;
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "silent";
 
 /**
@@ -3535,10 +3629,10 @@ module.exports = Expression["extends"](KIND, function Silent(expr, docs, locatio
   this.expr = expr;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2898:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9672
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3547,7 +3641,7 @@ module.exports = Expression["extends"](KIND, function Silent(expr, docs, locatio
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "statement";
 
 /**
@@ -3560,10 +3654,10 @@ module.exports = Node["extends"](KIND, function Statement(kind, docs, location) 
   Node.apply(this, [kind || KIND, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 5037:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 711
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3572,7 +3666,7 @@ module.exports = Node["extends"](KIND, function Statement(kind, docs, location) 
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "static";
 
 /**
@@ -3587,10 +3681,10 @@ module.exports = Statement["extends"](KIND, function Static(variables, docs, loc
   this.variables = variables;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8409:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1865
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3599,7 +3693,7 @@ module.exports = Statement["extends"](KIND, function Static(variables, docs, loc
  */
 
 
-var Lookup = __webpack_require__(7592);
+var Lookup = __webpack_require__(7427);
 var KIND = "staticlookup";
 
 /**
@@ -3612,10 +3706,10 @@ module.exports = Lookup["extends"](KIND, function StaticLookup(what, offset, doc
   Lookup.apply(this, [KIND, what, offset, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2941:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1102
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3624,7 +3718,7 @@ module.exports = Lookup["extends"](KIND, function StaticLookup(what, offset, doc
  */
 
 
-var Reference = __webpack_require__(1211);
+var Reference = __webpack_require__(8276);
 var KIND = "staticreference";
 
 /**
@@ -3639,10 +3733,10 @@ var StaticReference = Reference["extends"](KIND, function StaticReference(raw, d
 });
 module.exports = StaticReference;
 
-/***/ }),
+/***/ },
 
-/***/ 9732:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1231
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3651,7 +3745,7 @@ module.exports = StaticReference;
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "staticvariable";
 
 /**
@@ -3668,10 +3762,10 @@ module.exports = Node["extends"](KIND, function StaticVariable(variable, default
   this.defaultValue = defaultValue;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7129:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7472
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3680,7 +3774,7 @@ module.exports = Node["extends"](KIND, function StaticVariable(variable, default
  */
 
 
-var Literal = __webpack_require__(6602);
+var Literal = __webpack_require__(5514);
 var KIND = "string";
 
 /**
@@ -3699,10 +3793,10 @@ module.exports = Literal["extends"](KIND, function String(isDoubleQuote, value, 
   this.isDoubleQuote = isDoubleQuote;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2589:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6133
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3711,7 +3805,7 @@ module.exports = Literal["extends"](KIND, function String(isDoubleQuote, value, 
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "switch";
 
 /**
@@ -3730,10 +3824,10 @@ module.exports = Statement["extends"](KIND, function Switch(test, body, shortFor
   this.shortForm = shortForm;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 5228:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1197
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3742,7 +3836,7 @@ module.exports = Statement["extends"](KIND, function Switch(test, body, shortFor
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "throw";
 
 /**
@@ -3757,10 +3851,10 @@ module.exports = Statement["extends"](KIND, function Throw(what, docs, location)
   this.what = what;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2523:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6649
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3769,7 +3863,7 @@ module.exports = Statement["extends"](KIND, function Throw(what, docs, location)
  */
 
 
-var Declaration = __webpack_require__(9036);
+var Declaration = __webpack_require__(8533);
 var KIND = "trait";
 
 /**
@@ -3784,10 +3878,10 @@ module.exports = Declaration["extends"](KIND, function Trait(name, body, docs, l
   this.body = body;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8084:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 1837
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3796,7 +3890,7 @@ module.exports = Declaration["extends"](KIND, function Trait(name, body, docs, l
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "traitalias";
 var IS_UNDEFINED = "";
 var IS_PUBLIC = "public";
@@ -3820,20 +3914,21 @@ module.exports = Node["extends"](KIND, function TraitAlias(trait, method, as, fl
   this.as = as;
   this.visibility = IS_UNDEFINED;
   if (flags) {
-    if (flags[0] === 0) {
+    var getVis = flags[0][0];
+    if (getVis === 0) {
       this.visibility = IS_PUBLIC;
-    } else if (flags[0] === 1) {
+    } else if (getVis === 1) {
       this.visibility = IS_PROTECTED;
-    } else if (flags[0] === 2) {
+    } else if (getVis === 2) {
       this.visibility = IS_PRIVATE;
     }
   }
 });
 
-/***/ }),
+/***/ },
 
-/***/ 4398:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2277
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3842,7 +3937,7 @@ module.exports = Node["extends"](KIND, function TraitAlias(trait, method, as, fl
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "traitprecedence";
 
 /**
@@ -3861,10 +3956,10 @@ module.exports = Node["extends"](KIND, function TraitPrecedence(trait, method, i
   this.instead = instead;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 3181:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8010
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3873,7 +3968,7 @@ module.exports = Node["extends"](KIND, function TraitPrecedence(trait, method, i
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "traituse";
 
 /**
@@ -3890,10 +3985,10 @@ module.exports = Node["extends"](KIND, function TraitUse(traits, adaptations, do
   this.adaptations = adaptations;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8466:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7579
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3902,7 +3997,7 @@ module.exports = Node["extends"](KIND, function TraitUse(traits, adaptations, do
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "try";
 
 /**
@@ -3921,10 +4016,10 @@ module.exports = Statement["extends"](KIND, function Try(body, catches, always, 
   this.always = always;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8062:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 3460
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3933,7 +4028,7 @@ module.exports = Statement["extends"](KIND, function Try(body, catches, always, 
  */
 
 
-var Reference = __webpack_require__(1211);
+var Reference = __webpack_require__(8276);
 var KIND = "typereference";
 
 /**
@@ -3948,13 +4043,13 @@ var TypeReference = Reference["extends"](KIND, function TypeReference(name, raw,
   this.name = name;
   this.raw = raw;
 });
-TypeReference.types = ["int", "float", "string", "bool", "object", "array", "callable", "iterable", "void", "static"];
+TypeReference.types = ["int", "float", "string", "bool", "object", "array", "callable", "iterable", "void", "static", "null", "never", "mixed", "true", "false"];
 module.exports = TypeReference;
 
-/***/ }),
+/***/ },
 
-/***/ 6178:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2702
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3963,7 +4058,7 @@ module.exports = TypeReference;
  */
 
 
-var Operation = __webpack_require__(6210);
+var Operation = __webpack_require__(8268);
 var KIND = "unary";
 
 /**
@@ -3980,10 +4075,10 @@ module.exports = Operation["extends"](KIND, function Unary(type, what, docs, loc
   this.what = what;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7264:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 514
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -3992,7 +4087,7 @@ module.exports = Operation["extends"](KIND, function Unary(type, what, docs, loc
  */
 
 
-var Declaration = __webpack_require__(9036);
+var Declaration = __webpack_require__(8533);
 var KIND = "uniontype";
 
 /**
@@ -4007,10 +4102,10 @@ module.exports = Declaration["extends"](KIND, function UnionType(types, docs, lo
   this.types = types;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 2379:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5684
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4019,7 +4114,7 @@ module.exports = Declaration["extends"](KIND, function UnionType(types, docs, lo
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "unset";
 
 /**
@@ -4033,10 +4128,10 @@ module.exports = Statement["extends"](KIND, function Unset(variables, docs, loca
   this.variables = variables;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 3693:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 8019
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4045,7 +4140,7 @@ module.exports = Statement["extends"](KIND, function Unset(variables, docs, loca
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "usegroup";
 
 /**
@@ -4055,7 +4150,7 @@ var KIND = "usegroup";
  * @extends {Statement}
  * @property {string|null} name
  * @property {string|null} type - Possible value : function, const
- * @property {UseItem[]} item
+ * @property {UseItem[]} items
  * @see {Namespace}
  * @see http://php.net/manual/en/language.namespaces.importing.php
  */
@@ -4066,10 +4161,10 @@ module.exports = Statement["extends"](KIND, function UseGroup(name, type, items,
   this.items = items;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7880:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7721
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4078,7 +4173,7 @@ module.exports = Statement["extends"](KIND, function UseGroup(name, type, items,
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "useitem";
 
 /**
@@ -4113,10 +4208,10 @@ UseItem.TYPE_CONST = "const";
 UseItem.TYPE_FUNCTION = "function";
 module.exports = UseItem;
 
-/***/ }),
+/***/ },
 
-/***/ 6520:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4369
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4125,7 +4220,7 @@ module.exports = UseItem;
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "variable";
 
 /**
@@ -4152,10 +4247,10 @@ module.exports = Expression["extends"](KIND, function Variable(name, curly, docs
   this.curly = curly || false;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 3656:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 40
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4164,7 +4259,7 @@ module.exports = Expression["extends"](KIND, function Variable(name, curly, docs
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "variadic";
 
 /**
@@ -4180,10 +4275,10 @@ module.exports = Expression["extends"](KIND, function variadic(what, docs, locat
   this.what = what;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 7886:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 4919
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4192,7 +4287,7 @@ module.exports = Expression["extends"](KIND, function variadic(what, docs, locat
  */
 
 
-var Node = __webpack_require__(2730);
+var Node = __webpack_require__(4065);
 var KIND = "variadicplaceholder";
 
 /**
@@ -4207,10 +4302,10 @@ module.exports = Node["extends"](KIND, function VariadicPlaceholder(docs, locati
   Node.apply(this, [KIND, docs, location]);
 });
 
-/***/ }),
+/***/ },
 
-/***/ 41:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7676
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4219,7 +4314,7 @@ module.exports = Node["extends"](KIND, function VariadicPlaceholder(docs, locati
  */
 
 
-var Statement = __webpack_require__(2898);
+var Statement = __webpack_require__(9672);
 var KIND = "while";
 
 /**
@@ -4238,10 +4333,10 @@ module.exports = Statement["extends"](KIND, function While(test, body, shortForm
   this.shortForm = shortForm;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 288:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 2596
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4250,7 +4345,7 @@ module.exports = Statement["extends"](KIND, function While(test, body, shortForm
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "yield";
 
 /**
@@ -4268,10 +4363,10 @@ module.exports = Expression["extends"](KIND, function Yield(value, key, docs, lo
   this.key = key;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 8789:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 6744
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4280,7 +4375,7 @@ module.exports = Expression["extends"](KIND, function Yield(value, key, docs, lo
  */
 
 
-var Expression = __webpack_require__(1530);
+var Expression = __webpack_require__(839);
 var KIND = "yieldfrom";
 
 /**
@@ -4296,10 +4391,10 @@ module.exports = Expression["extends"](KIND, function YieldFrom(value, docs, loc
   this.value = value;
 });
 
-/***/ }),
+/***/ },
 
-/***/ 1427:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 5362
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2020 Glayzzle (BSD3 License)
@@ -4308,11 +4403,11 @@ module.exports = Expression["extends"](KIND, function YieldFrom(value, docs, loc
  */
 
 
-function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
-var lexer = __webpack_require__(8720);
-var parser = __webpack_require__(8410);
-var tokens = __webpack_require__(6455);
-var AST = __webpack_require__(555);
+function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
+var lexer = __webpack_require__(9108);
+var parser = __webpack_require__(7259);
+var tokens = __webpack_require__(1906);
+var AST = __webpack_require__(8938);
 
 /**
  * @private
@@ -4322,6 +4417,9 @@ function combine(src, to) {
   var i = keys.length;
   while (i--) {
     var k = keys[i];
+    if (k === "__proto__" || k === "constructor" || k === "prototype") {
+      continue;
+    }
     var val = src[k];
     if (val === null) {
       delete to[k];
@@ -4542,10 +4640,10 @@ module.exports.Engine = Engine;
 // allow the default export in index.d.ts
 module.exports["default"] = Engine;
 
-/***/ }),
+/***/ },
 
-/***/ 8720:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 9108
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -4569,7 +4667,7 @@ module.exports["default"] = Engine;
  * @property {object} keywords List of php keyword
  * @property {object} castKeywords List of php keywords for type casting
  */
-function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
+function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 var Lexer = function Lexer(engine) {
   this.engine = engine;
   this.tok = this.engine.tokens.names;
@@ -4580,7 +4678,7 @@ var Lexer = function Lexer(engine) {
   this.mode_eval = false;
   this.asp_tags = false;
   this.short_tags = false;
-  this.version = 801;
+  this.version = 803;
   this.yyprevcol = 0;
   this.keywords = {
     __class__: this.tok.T_CLASS_C,
@@ -4971,7 +5069,6 @@ Lexer.prototype.lex = function () {
       return ";"; /* implicit ; */
     }
   }
-
   if (!this.yylloc.prev_offset) {
     this.yylloc.prev_offset = this.yylloc.first_offset;
     this.yylloc.prev_line = this.yylloc.first_line;
@@ -5070,17 +5167,17 @@ Lexer.prototype.next = function () {
 };
 
 // extends the lexer with states
-[__webpack_require__(7010), __webpack_require__(438), __webpack_require__(3607), __webpack_require__(7405), __webpack_require__(465), __webpack_require__(5135), __webpack_require__(4437), __webpack_require__(1298), __webpack_require__(5609)].forEach(function (ext) {
+[__webpack_require__(9671), __webpack_require__(2429), __webpack_require__(3683), __webpack_require__(6545), __webpack_require__(3810), __webpack_require__(8510), __webpack_require__(4401), __webpack_require__(4349), __webpack_require__(8582)].forEach(function (ext) {
   for (var k in ext) {
     Lexer.prototype[k] = ext[k];
   }
 });
 module.exports = Lexer;
 
-/***/ }),
+/***/ },
 
-/***/ 7010:
-/***/ ((module) => {
+/***/ 9671
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -5096,7 +5193,7 @@ module.exports = {
     var ch = this.input();
     if (this.is_WHITESPACE()) {
       do {
-        ch = this.input();
+        this.input();
       } while (this.is_WHITESPACE());
       this.unput(1);
       return null;
@@ -5116,6 +5213,7 @@ module.exports = {
       case ")":
       case ":":
       case "=":
+      case ";":
       case "|":
       case "&":
       case "^":
@@ -5128,6 +5226,9 @@ module.exports = {
       case ">":
       case "!":
       case ".":
+      case "{":
+      case "}":
+      case "$":
         return this.consume_TOKEN();
       case "[":
         this.attributeListDepth[this.attributeIndex]++;
@@ -5166,10 +5267,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 438:
-/***/ ((module) => {
+/***/ 2429
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -5216,7 +5317,6 @@ module.exports = {
         this.unput(1); // reset
       }
     }
-
     while (this.offset < this.size) {
       ch = this.input();
       if (ch === "*" && this._input[this.offset] === "/") {
@@ -5228,10 +5328,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 3607:
-/***/ ((module) => {
+/***/ 3683
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -5291,10 +5391,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 7405:
-/***/ ((module) => {
+/***/ 6545
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -5459,10 +5559,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 465:
-/***/ ((module) => {
+/***/ 3810
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -5548,10 +5648,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 5135:
-/***/ ((module) => {
+/***/ 8510
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -5611,7 +5711,6 @@ module.exports = {
           if (ch === "\n" || ch === "\r") {
             this.input(); // consume the newline
           }
-
           this.aspTagMode = false;
           if (this.conditionStack.length > 1) {
             this.begin("INITIAL");
@@ -5660,10 +5759,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 4437:
-/***/ ((module) => {
+/***/ 4401
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -5674,7 +5773,7 @@ module.exports = {
 
 var newline = ["\n", "\r"];
 var valid_after_heredoc = ["\n", "\r", ";"];
-var valid_after_heredoc_73 = valid_after_heredoc.concat(["\t", " ", ",", "]", ")", "/", "=", "!"]);
+var valid_after_heredoc_73 = valid_after_heredoc.concat(["\t", " ", ",", "]", ")", "/", "=", "!", "."]);
 module.exports = {
   T_CONSTANT_ENCAPSED_STRING: function T_CONSTANT_ENCAPSED_STRING() {
     var ch;
@@ -6139,10 +6238,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 1298:
-/***/ ((module) => {
+/***/ 4349
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -6369,7 +6468,8 @@ module.exports = {
         }
       }
       if (this.version >= 800 && this._input[this.offset] === "-" && this._input[this.offset + 1] === ">") {
-        this.consume(2);
+        this.consume(1);
+        this.begin("ST_LOOKING_FOR_PROPERTY").input();
         return this.tok.T_NULLSAFE_OBJECT_OPERATOR;
       }
       return "?";
@@ -6472,6 +6572,9 @@ module.exports = {
       } else if (nchar === "|") {
         this.input();
         return this.tok.T_BOOLEAN_OR;
+      } else if (nchar === ">") {
+        this.input();
+        return this.tok.T_PIPE;
       }
       return "|";
     },
@@ -6485,10 +6588,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 5609:
-/***/ ((module) => {
+/***/ 8582
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -6591,10 +6694,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 8410:
-/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+/***/ 7259
+(module, __unused_webpack_exports, __webpack_require__) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -6603,7 +6706,7 @@ module.exports = {
  */
 
 
-var Position = __webpack_require__(7724);
+var Position = __webpack_require__(8822);
 
 /**
  * @private
@@ -6634,7 +6737,7 @@ var Parser = function Parser(lexer, ast) {
   this.token = null;
   this.prev = null;
   this.debug = false;
-  this.version = 801;
+  this.version = 803;
   this.extractDoc = false;
   this.extractTokens = false;
   this.suppressErrors = false;
@@ -6647,7 +6750,7 @@ var Parser = function Parser(lexer, ast) {
     VARIABLE: new Map([this.tok.T_VARIABLE, "$", "&", this.tok.T_STRING, this.tok.T_NAME_RELATIVE, this.tok.T_NAME_QUALIFIED, this.tok.T_NAME_FULLY_QUALIFIED, this.tok.T_NAMESPACE, this.tok.T_STATIC].map(mapIt)),
     SCALAR: new Map([this.tok.T_CONSTANT_ENCAPSED_STRING, this.tok.T_START_HEREDOC, this.tok.T_LNUMBER, this.tok.T_DNUMBER, this.tok.T_ARRAY, "[", this.tok.T_CLASS_C, this.tok.T_TRAIT_C, this.tok.T_FUNC_C, this.tok.T_METHOD_C, this.tok.T_LINE, this.tok.T_FILE, this.tok.T_DIR, this.tok.T_NS_C, '"', 'b"', 'B"', "-", this.tok.T_NS_SEPARATOR].map(mapIt)),
     T_MAGIC_CONST: new Map([this.tok.T_CLASS_C, this.tok.T_TRAIT_C, this.tok.T_FUNC_C, this.tok.T_METHOD_C, this.tok.T_LINE, this.tok.T_FILE, this.tok.T_DIR, this.tok.T_NS_C].map(mapIt)),
-    T_MEMBER_FLAGS: new Map([this.tok.T_PUBLIC, this.tok.T_PRIVATE, this.tok.T_PROTECTED, this.tok.T_STATIC, this.tok.T_ABSTRACT, this.tok.T_FINAL].map(mapIt)),
+    T_MEMBER_FLAGS: new Map([this.tok.T_PUBLIC, this.tok.T_PRIVATE, this.tok.T_PROTECTED, this.tok.T_STATIC, this.tok.T_ABSTRACT, this.tok.T_FINAL, this.tok.T_READ_ONLY].map(mapIt)),
     EOS: new Map([";", this.EOF, this.tok.T_INLINE_HTML].map(mapIt)),
     EXPR: new Map(["@", "-", "+", "!", "~", "(", "`", this.tok.T_LIST, this.tok.T_CLONE, this.tok.T_INC, this.tok.T_DEC, this.tok.T_NEW, this.tok.T_ISSET, this.tok.T_EMPTY, this.tok.T_MATCH, this.tok.T_INCLUDE, this.tok.T_INCLUDE_ONCE, this.tok.T_REQUIRE, this.tok.T_REQUIRE_ONCE, this.tok.T_EVAL, this.tok.T_INT_CAST, this.tok.T_DOUBLE_CAST, this.tok.T_STRING_CAST, this.tok.T_ARRAY_CAST, this.tok.T_OBJECT_CAST, this.tok.T_BOOL_CAST, this.tok.T_UNSET_CAST, this.tok.T_EXIT, this.tok.T_PRINT, this.tok.T_YIELD, this.tok.T_STATIC, this.tok.T_FUNCTION, this.tok.T_FN,
     // using VARIABLES :
@@ -6746,7 +6849,12 @@ Parser.prototype.raiseError = function (message, msgExpect, expect, token) {
     throw err;
   }
   // Error node :
+  // Temporarily set prev to the current token's end so the error node
+  // spans from the current token's start to its end (not the previous token's end).
+  var savedPrev = this.prev;
+  this.prev = [this.lexer.yylloc.last_line, this.lexer.yylloc.last_column, this.lexer.offset];
   var node = this.ast.prepare("error", null, this)(message, token, this.lexer.yylloc.first_line, expect);
+  this.prev = savedPrev;
   this._errors.push(node);
   return node;
 };
@@ -7058,7 +7166,7 @@ Parser.prototype.is = function (type) {
 };
 
 // extends the parser with syntax files
-[__webpack_require__(3665), __webpack_require__(8342), __webpack_require__(9673), __webpack_require__(3166), __webpack_require__(847), __webpack_require__(2706), __webpack_require__(4002), __webpack_require__(3745), __webpack_require__(9905), __webpack_require__(1250), __webpack_require__(9889), __webpack_require__(4992), __webpack_require__(7991), __webpack_require__(4544), __webpack_require__(9957), __webpack_require__(1099)].forEach(function (ext) {
+[__webpack_require__(5525), __webpack_require__(7072), __webpack_require__(3997), __webpack_require__(6477), __webpack_require__(979), __webpack_require__(8214), __webpack_require__(9461), __webpack_require__(5931), __webpack_require__(9147), __webpack_require__(9219), __webpack_require__(7170), __webpack_require__(6261), __webpack_require__(2478), __webpack_require__(77), __webpack_require__(6077), __webpack_require__(1130)].forEach(function (ext) {
   for (var k in ext) {
     /* istanbul ignore next */
     if (Object.prototype.hasOwnProperty.call(Parser.prototype, k)) {
@@ -7070,10 +7178,10 @@ Parser.prototype.is = function (type) {
 });
 module.exports = Parser;
 
-/***/ }),
+/***/ },
 
-/***/ 3665:
-/***/ ((module) => {
+/***/ 5525
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -7091,7 +7199,7 @@ module.exports = {
    * ```
    */
   read_array: function read_array() {
-    var expect = null;
+    var expect;
     var shortForm = false;
     var result = this.node("array");
     if (this.token === this.tok.T_ARRAY) {
@@ -7140,7 +7248,7 @@ module.exports = {
     }
     var entry = this.node("entry");
     var key = null;
-    var value = null;
+    var value;
     var byRef = false;
     var unpack = false;
     if (this.token === "&") {
@@ -7174,10 +7282,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 8342:
-/***/ ((module) => {
+/***/ 7072
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -7186,16 +7294,16 @@ module.exports = {
  */
 
 
-function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest(); }
+function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
 function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _iterableToArrayLimit(arr, i) { var _i = null == arr ? null : "undefined" != typeof Symbol && arr[Symbol.iterator] || arr["@@iterator"]; if (null != _i) { var _s, _e, _x, _r, _arr = [], _n = !0, _d = !1; try { if (_x = (_i = _i.call(arr)).next, 0 === i) { if (Object(_i) !== _i) return; _n = !1; } else for (; !(_n = (_s = _x.call(_i)).done) && (_arr.push(_s.value), _arr.length !== i); _n = !0); } catch (err) { _d = !0, _e = err; } finally { try { if (!_n && null != _i["return"] && (_r = _i["return"](), Object(_r) !== _r)) return; } finally { if (_d) throw _e; } } return _arr; } }
-function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
-function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _unsupportedIterableToArray(arr) || _nonIterableSpread(); }
+function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
+function _toConsumableArray(r) { return _arrayWithoutHoles(r) || _iterableToArray(r) || _unsupportedIterableToArray(r) || _nonIterableSpread(); }
 function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
-function _iterableToArray(iter) { if (typeof Symbol !== "undefined" && iter[Symbol.iterator] != null || iter["@@iterator"] != null) return Array.from(iter); }
-function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) return _arrayLikeToArray(arr); }
-function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i]; return arr2; }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _iterableToArray(r) { if ("undefined" != typeof Symbol && null != r[Symbol.iterator] || null != r["@@iterator"]) return Array.from(r); }
+function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 module.exports = {
   /*
    * reading a class
@@ -7272,27 +7380,31 @@ module.exports = {
         result = result.concat(this.read_trait_use_statement());
         continue;
       }
+      var locStart = this.position();
+      if (this.token === this.tok.T_ATTRIBUTE) {
+        attrs = this.read_attr_list();
+      }
 
       // check enum cases
       if (allow_enum_cases && this.token === this.tok.T_CASE) {
-        var enumcase = this.read_enum_case();
+        var enumcase = this.read_enum_case(attrs);
+        attrs = [];
         if (this.expect(";")) {
           this.next();
         }
         result = result.concat(enumcase);
         continue;
       }
-      if (this.token === this.tok.T_ATTRIBUTE) {
-        attrs = this.read_attr_list();
-      }
-      var locStart = this.position();
 
       // read member flags
       var flags = this.read_member_flags(false);
 
       // check constant
       if (this.token === this.tok.T_CONST) {
-        var constants = this.read_constant_list(flags, attrs);
+        if (flags[0][1] !== -1) {
+          this.raiseError("Cannot use asymmetric visibility on constants");
+        }
+        var constants = this.read_constant_list(flags, attrs, locStart);
         if (this.expect(";")) {
           this.next();
         }
@@ -7303,10 +7415,9 @@ module.exports = {
       // jump over T_VAR then land on T_VARIABLE
       if (allow_variables && this.token === this.tok.T_VAR) {
         this.next().expect(this.tok.T_VARIABLE);
-        flags[0] = null; // public (as null)
+        flags[0][0] = null; // public (as null)
         flags[1] = 0; // non static var
       }
-
       if (this.token === this.tok.T_FUNCTION) {
         // reads a function
         result.push(this.read_function(false, flags, attrs, locStart));
@@ -7315,10 +7426,8 @@ module.exports = {
       // support https://wiki.php.net/rfc/typed_properties_v2
       this.version >= 704 && (this.token === "?" || this.token === this.tok.T_ARRAY || this.token === this.tok.T_CALLABLE || this.token === this.tok.T_NAMESPACE || this.token === this.tok.T_NAME_FULLY_QUALIFIED || this.token === this.tok.T_NAME_QUALIFIED || this.token === this.tok.T_NAME_RELATIVE || this.token === this.tok.T_NS_SEPARATOR || this.token === this.tok.T_STRING))) {
         // reads a variable
-        var variables = this.read_variable_list(flags, attrs);
+        var variables = this.read_variable_list(flags, attrs, locStart);
         attrs = [];
-        this.expect(";");
-        this.next();
         result = result.concat(variables);
       } else {
         // raise an error
@@ -7337,8 +7446,8 @@ module.exports = {
    *  variable_list ::= (variable_declaration ',')* variable_declaration
    * ```
    */
-  read_variable_list: function read_variable_list(flags, attrs) {
-    var result = this.node("propertystatement");
+  read_variable_list: function read_variable_list(flags, attrs, locStart) {
+    var property_statement = this.node("propertystatement");
     var properties = this.read_list(
     /*
      * Reads a variable declaration
@@ -7349,8 +7458,8 @@ module.exports = {
      */
     function read_variable_declaration() {
       var result = this.node("property");
-      var readonly = false;
-      if (this.token === this.tok.T_READ_ONLY) {
+      var readonly = flags[3] === 1;
+      if (!readonly && this.token === this.tok.T_READ_ONLY) {
         readonly = true;
         this.next();
       }
@@ -7363,29 +7472,119 @@ module.exports = {
       var name = this.text().substring(1); // ignore $
       this.next();
       propName = propName(name);
-      if (this.token === ";" || this.token === ",") {
-        return result(propName, null, readonly, nullable, type, attrs || []);
-      } else if (this.token === "=") {
+      var value = null;
+      var property_hooks = [];
+      this.expect([",", ";", "=", "{"]);
+
+      // Property has a value
+      if (this.token === "=") {
         // https://github.com/php/php-src/blob/master/Zend/zend_language_parser.y#L815
-        return result(propName, this.next().read_expr(), readonly, nullable, type, attrs || []);
-      } else {
-        this.expect([",", ";", "="]);
-        return result(propName, null, nullable, type, attrs || []);
+        value = this.next().read_expr();
       }
+
+      // Property is using a hook to define getter/setters
+      if (this.token === "{") {
+        property_hooks = this.read_property_hooks();
+      } else {
+        this.expect([";", ","]);
+      }
+      return result(propName, value, readonly, nullable, type, attrs || [], property_hooks);
     }, ",");
-    return result(null, properties, flags);
+    property_statement = property_statement(null, properties, flags);
+    if (locStart && property_statement.loc) {
+      property_statement.loc.start = locStart;
+      if (property_statement.loc.source) {
+        property_statement.loc.source = this.lexer._input.substr(property_statement.loc.start.offset, property_statement.loc.end.offset - property_statement.loc.start.offset);
+      }
+    }
+
+    // semicolons are found only for regular properties definitions.
+    // Property hooks are terminated by a closing curly brace, }.
+    // property_statement is instanciated before this check to avoid including the semicolon in the AST end location of the property.
+    if (this.token === ";") {
+      this.next();
+    }
+    return property_statement;
+  },
+  /*
+   * Reads property hooks
+   */
+  read_property_hooks: function read_property_hooks() {
+    if (this.version < 804) {
+      this.raiseError("Parse Error: Property hooks require PHP 8.4+");
+    }
+    this.expect("{");
+    this.next();
+    var hooks = [];
+    while (this.token !== this.EOF && this.token !== "}") {
+      hooks.push(this.read_property_hook());
+    }
+    this.expect("}");
+    this.next();
+    return hooks;
+  },
+  read_property_hook: function read_property_hook() {
+    var property_hooks = this.node("propertyhook");
+    var attrs = [];
+    if (this.token === this.tok.T_ATTRIBUTE) {
+      attrs = this.read_attr_list();
+    }
+    var is_final = this.token === this.tok.T_FINAL;
+    if (is_final) this.next();
+    var is_reference = this.token === "&";
+    if (is_reference) this.next();
+    var method_name = this.text();
+    if (method_name !== "get" && method_name !== "set") {
+      this.raiseError("Parse Error: Property hooks must be either 'get' or 'set'");
+    }
+    this.next();
+    var parameter = null;
+    var body = null;
+    this.expect([this.tok.T_DOUBLE_ARROW, "{", "(", ";"]);
+
+    // interface or abstract definition
+    if (this.token === ";") {
+      this.next();
+      return property_hooks(method_name, is_final, is_reference, parameter, body, attrs);
+    }
+    if (this.token === "(") {
+      this.next();
+      parameter = this.read_parameter(false);
+      this.expect(")");
+      this.next();
+    }
+    if (this.token === this.tok.T_DOUBLE_ARROW) {
+      this.next();
+      body = this.read_expr();
+      this.next();
+    } else if (this.token === "{") {
+      body = this.read_code_block();
+    }
+    return property_hooks(method_name, is_final, is_reference, parameter, body, attrs);
   },
   /*
    * Reads constant list
    * ```ebnf
-   *  constant_list ::= T_CONST (constant_declaration ',')* constant_declaration
+   *  constant_list ::= T_CONST [type] (constant_declaration ',')* constant_declaration
    * ```
    */
-  read_constant_list: function read_constant_list(flags, attrs) {
+  read_constant_list: function read_constant_list(flags, attrs, locStart) {
+    var result = this.node("classconstant");
     if (this.expect(this.tok.T_CONST)) {
       this.next();
     }
-    var result = this.node("classconstant");
+    // static, abstract, and readonly are never valid on class constants
+    if (flags[1] === 1 || flags[2] === 1 || flags[3] === 1) {
+      this.error();
+    }
+    // final class constants require PHP 8.1+
+    if (flags[2] === 2 && this.version < 801) {
+      this.raiseError("Final class constants are not allowed before PHP 8.1");
+    }
+    var _ref = this.version >= 803 ? this.read_optional_type() : [false, null],
+      _ref2 = _slicedToArray(_ref, 2),
+      nullable = _ref2[0],
+      type = _ref2[1];
     var items = this.read_list(
     /*
      * Reads a constant declaration
@@ -7412,68 +7611,105 @@ module.exports = {
       }
       return result(constName, value);
     }, ",");
-    return result(null, items, flags, attrs || []);
+    var node = result(null, items, flags, nullable, type, attrs || []);
+    if (locStart && node.loc) {
+      node.loc.start = locStart;
+      if (node.loc.source) {
+        node.loc.source = this.lexer._input.substr(node.loc.start.offset, node.loc.end.offset - node.loc.start.offset);
+      }
+    }
+    return node;
   },
   /*
    * Read member flags
    * @return array
-   *  1st index : 0 => public, 1 => protected, 2 => private
+   *  1st index : [get, set] visibility tuple
+   *    get/set: -1 => no visibility, 0 => public, 1 => protected, 2 => private
    *  2nd index : 0 => instance member, 1 => static member
    *  3rd index : 0 => normal, 1 => abstract member, 2 => final member
+   *  4th index : 0 => no readonly, 1 => readonly
    */
   read_member_flags: function read_member_flags(asInterface) {
-    var result = [-1, -1, -1];
-    if (this.is("T_MEMBER_FLAGS")) {
-      var idx = 0,
-        val = 0;
-      do {
-        switch (this.token) {
-          case this.tok.T_PUBLIC:
+    var result = [[-1, -1], 0, 0, 0];
+    var seen = new Set();
+    while (this.is("T_MEMBER_FLAGS")) {
+      var idx = -1,
+        val = -1;
+      switch (this.token) {
+        case this.tok.T_PUBLIC:
+        case this.tok.T_PROTECTED:
+        case this.tok.T_PRIVATE:
+          {
             idx = 0;
-            val = 0;
-            break;
-          case this.tok.T_PROTECTED:
-            idx = 0;
-            val = 1;
-            break;
-          case this.tok.T_PRIVATE:
-            idx = 0;
-            val = 2;
-            break;
-          case this.tok.T_STATIC:
-            idx = 1;
-            val = 1;
-            break;
-          case this.tok.T_ABSTRACT:
-            idx = 2;
-            val = 1;
-            break;
-          case this.tok.T_FINAL:
-            idx = 2;
-            val = 2;
-            break;
-        }
-        if (asInterface) {
-          if (idx == 0 && val == 2) {
-            // an interface can't be private
-            this.expect([this.tok.T_PUBLIC, this.tok.T_PROTECTED]);
-            val = -1;
-          } else if (idx == 2 && val == 1) {
-            // an interface cant be abstract
-            this.error();
-            val = -1;
+            val = this.token === this.tok.T_PUBLIC ? 0 : this.token === this.tok.T_PROTECTED ? 1 : 2;
+            if (asInterface && val === 2) {
+              // an interface can't be private
+              this.expect([this.tok.T_PUBLIC, this.tok.T_PROTECTED]);
+              val = -1;
+            }
+            this.next(); // consume the visibility keyword
+            if (this.version >= 804 && this.token === "(") {
+              // visibility(set) modifier: e.g. private(set)
+              // For shorthand, default get visibility to public if not already set
+              if (result[0][0] === -1) {
+                result[0][0] = 0;
+              }
+              this.next(); // consume '('
+              if (this.token !== this.tok.T_STRING || this.text() !== "set") {
+                this.error("set");
+              } else {
+                this.next(); // consume 'set'
+              }
+              if (this.expect(")")) {
+                this.next(); // consume ')'
+              }
+              if (seen.has("set")) {
+                this.error(); // set modifier already defined
+              } else if (val !== -1) {
+                seen.add("set");
+                result[0][1] = val;
+              }
+              continue;
+            }
+            if (seen.has(idx)) {
+              this.error();
+            } else if (val !== -1) {
+              seen.add(idx);
+              result[0][0] = val;
+            }
+            continue;
           }
-        }
-        if (result[idx] !== -1) {
-          // already defined flag
-          this.error();
-        } else if (val !== -1) {
-          result[idx] = val;
-        }
-      } while (this.next().is("T_MEMBER_FLAGS"));
+        case this.tok.T_STATIC:
+          idx = 1;
+          val = 1;
+          break;
+        case this.tok.T_ABSTRACT:
+          idx = 2;
+          val = 1;
+          break;
+        case this.tok.T_FINAL:
+          idx = 2;
+          val = 2;
+          break;
+        case this.tok.T_READ_ONLY:
+          idx = 3;
+          val = 1;
+          break;
+      }
+      if (asInterface && idx === 2 && val === 1) {
+        // an interface can't be abstract
+        this.error();
+        val = -1;
+      }
+      if (seen.has(idx)) {
+        // already defined flag
+        this.error();
+      } else if (val !== -1) {
+        seen.add(idx);
+        result[idx] = val;
+      }
+      this.next();
     }
-    if (result[1] == -1) result[1] = 0;
-    if (result[2] == -1) result[2] = 0;
     return result;
   },
   /*
@@ -7500,10 +7736,12 @@ module.exports = {
    * ;
    */
   read_optional_type: function read_optional_type() {
-    var nullable = false;
-    if (this.token === "?") {
-      nullable = true;
+    var nullable = this.token === "?";
+    if (nullable) {
       this.next();
+    }
+    if (this.peekSkipComments() === "=") {
+      return [false, null];
     }
     var type = this.read_types();
     if (nullable && !type) {
@@ -7525,6 +7763,15 @@ module.exports = {
       } while (this.token === "|");
     }
     return [nullable, type];
+  },
+  peekSkipComments: function peekSkipComments() {
+    var lexerState = this.lexer.getState();
+    var nextToken;
+    do {
+      nextToken = this.lexer.lex();
+    } while (nextToken === this.tok.T_COMMENT || nextToken === this.tok.T_WHITESPACE);
+    this.lexer.setState(lexerState);
+    return nextToken;
   },
   /*
    * reading an interface
@@ -7556,8 +7803,8 @@ module.exports = {
    * ```
    */
   read_interface_body: function read_interface_body() {
-    var result = [],
-      attrs = [];
+    var result = [];
+    var attrs;
     while (this.token !== this.EOF && this.token !== "}") {
       if (this.token === this.tok.T_COMMENT) {
         result.push(this.read_comment());
@@ -7568,18 +7815,23 @@ module.exports = {
         continue;
       }
       var locStart = this.position();
-      attrs = this.read_attr_list();
+      attrs = [];
+      if (this.token === this.tok.T_ATTRIBUTE) {
+        attrs = this.read_attr_list();
+      }
       // read member flags
       var flags = this.read_member_flags(true);
 
       // check constant
-      if (this.token == this.tok.T_CONST) {
-        var constants = this.read_constant_list(flags, attrs);
+      if (this.token === this.tok.T_CONST) {
+        if (flags[0][1] !== -1) {
+          this.raiseError("Cannot use asymmetric visibility on constants");
+        }
+        var constants = this.read_constant_list(flags, attrs, locStart);
         if (this.expect(";")) {
           this.next();
         }
         result = result.concat(constants);
-        attrs = [];
       } else if (this.token === this.tok.T_FUNCTION) {
         // reads a function
         var method = this.read_function_declaration(2, flags, attrs, locStart);
@@ -7588,10 +7840,11 @@ module.exports = {
         if (this.expect(";")) {
           this.next();
         }
-        attrs = [];
+      } else if (this.token === this.tok.T_STRING) {
+        result.push(this.read_variable_list(flags, attrs, locStart));
       } else {
         // raise an error
-        this.error([this.tok.T_CONST, this.tok.T_FUNCTION]);
+        this.error([this.tok.T_CONST, this.tok.T_FUNCTION, this.tok.T_STRING]);
         this.next();
       }
     }
@@ -7606,7 +7859,7 @@ module.exports = {
    * trait ::= T_TRAIT T_STRING (T_EXTENDS (NAMESPACE_NAME ',')* NAMESPACE_NAME)? '{' FUNCTION* '}'
    * ```
    */
-  read_trait_declaration_statement: function read_trait_declaration_statement() {
+  read_trait_declaration_statement: function read_trait_declaration_statement(attrs) {
     var result = this.node("trait");
     // graceful mode : ignore token & go next
     if (this.token !== this.tok.T_TRAIT) {
@@ -7621,7 +7874,9 @@ module.exports = {
     propName = propName(name);
     this.expect("{");
     var body = this.next().read_class_body(true, false);
-    return result(propName, body);
+    var node = result(propName, body);
+    if (attrs) node.attrGroups = attrs;
+    return node;
   },
   /*
    * reading a use statement
@@ -7707,7 +7962,7 @@ module.exports = {
         var name = this.text();
         this.next();
         alias = alias(name);
-      } else if (flags === false) {
+      } else if (flags === null) {
         // no visibility flags and no name => too bad
         this.expect(this.tok.T_STRING);
       }
@@ -7720,10 +7975,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 9673:
-/***/ ((module) => {
+/***/ 3997
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -7766,10 +8021,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 847:
-/***/ ((module) => {
+/***/ 979
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -7810,7 +8065,7 @@ module.exports = {
     }
     return null;
   },
-  read_enum_case: function read_enum_case() {
+  read_enum_case: function read_enum_case(attrs) {
     this.expect(this.tok.T_CASE);
     var result = this.node("enumcase");
     var caseName = this.node("identifier");
@@ -7819,14 +8074,16 @@ module.exports = {
     caseName = caseName(name);
     var value = this.token === "=" ? this.next().read_expr() : null;
     this.expect(";");
-    return result(caseName, value);
+    var node = result(caseName, value);
+    if (attrs && attrs.length > 0) node.attrGroups = attrs;
+    return node;
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 3166:
-/***/ ((module) => {
+/***/ 6477
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -7933,11 +8190,27 @@ module.exports = {
         expr = this.read_expr(expr);
       }
     }
+    if (this.token === this.tok.T_NULLSAFE_OBJECT_OPERATOR) {
+      expr = result("nullsafepropertylookup", expr, this.read_what());
+      expr = this.recursive_variable_chain_scan(expr, false, true);
+    }
 
     // extra operations :
     // $username = $_GET['user'] ?? 'nobody';
     if (this.token === this.tok.T_COALESCE) {
       return result("bin", "??", expr, this.next().read_expr());
+    }
+    // extra operations :
+    // $a = "Hi" |> strtoupper(...);
+    if (this.token === this.tok.T_PIPE) {
+      if (this.version < 805) {
+        this.raiseError("PHP 8.5+ is required to use pipe operator");
+      }
+      var right = this.next().read_expr();
+      if (right.kind === "arrowfunc" && !right.parenthesizedExpression) {
+        this.raiseError("Arrow functions in a pipe chain must be wrapped in parentheses");
+      }
+      return result("bin", "|>", expr, right);
     }
 
     // extra operations :
@@ -8135,7 +8408,22 @@ module.exports = {
       attrs = this.read_attr_list();
     }
     if (this.token === this.tok.T_CLONE) {
-      return this.node("clone")(this.next().read_expr());
+      var node = this.node("clone");
+      this.next();
+      if (this.version >= 805 && this.token === "(") {
+        this.next();
+        var _what = this.read_variable(false, false);
+        _what = this.handleDereferencable(_what);
+        var properties = null;
+        if (this.token === ",") {
+          properties = this.next().read_expr();
+        }
+        this.expect(")") && this.next();
+        return node(_what, properties);
+      }
+      var what = this.read_variable(false, false);
+      what = this.handleDereferencable(what);
+      return node(what, null);
     }
     switch (this.token) {
       case this.tok.T_INC:
@@ -8143,7 +8431,11 @@ module.exports = {
       case this.tok.T_DEC:
         return this.node("pre")("-", this.next().read_variable(false, false));
       case this.tok.T_NEW:
-        return this.read_new_expr();
+        expr = this.read_new_expr();
+        if (this.token === this.tok.T_OBJECT_OPERATOR && this.version < 804) {
+          this.raiseError("New without parenthesis is not allowed before PHP 8.4");
+        }
+        return this.handleDereferencable(expr);
       case this.tok.T_ISSET:
       case this.tok.T_EMPTY:
       case this.tok.T_INCLUDE:
@@ -8353,6 +8645,10 @@ module.exports = {
         this.error();
       }
       right = this.read_new_expr();
+    } else if (this.token === "(") {
+      right = this.next().read_expr();
+      this.expect(")") && this.next();
+      right = this.recursive_variable_chain_scan(right, false, false);
     } else {
       right = this.read_variable(false, false);
     }
@@ -8380,7 +8676,7 @@ module.exports = {
       return _result2;
     }
     // introduced in PHP 7.4
-    if (!this.version >= 704) {
+    if (this.version < 704) {
       this.raiseError("Arrow Functions are not allowed");
     }
     // as an arrowfunc
@@ -8414,13 +8710,11 @@ module.exports = {
     if (this.version < 800) {
       this.raiseError("Match statements are not allowed before PHP 8");
     }
-    var cond = null;
-    var arms = [];
     if (this.expect("(")) this.next();
-    cond = this.read_expr();
+    var cond = this.read_expr();
     if (this.expect(")")) this.next();
     if (this.expect("{")) this.next();
-    arms = this.read_match_arms();
+    var arms = this.read_match_arms();
     if (this.expect("}")) this.next();
     return node(cond, arms);
   },
@@ -8458,28 +8752,29 @@ module.exports = {
     return conds;
   },
   read_attribute: function read_attribute() {
+    var node = this.node("attribute");
     var name = this.text();
     var args = [];
     this.next();
     if (this.token === "(") {
       args = this.read_argument_list();
     }
-    return this.node("attribute")(name, args);
+    return node(name, args);
   },
   read_attr_list: function read_attr_list() {
     var list = [];
     if (this.token === this.tok.T_ATTRIBUTE) {
       do {
-        var attrGr = this.node("attrgroup")([]);
+        var node = this.node("attrgroup");
         this.next();
-        attrGr.attrs.push(this.read_attribute());
+        var attrs = [this.read_attribute()];
         while (this.token === ",") {
           this.next();
-          if (this.token !== "]") attrGr.attrs.push(this.read_attribute());
+          if (this.token !== "]") attrs.push(this.read_attribute());
         }
-        list.push(attrGr);
         this.expect("]");
         this.next();
+        list.push(node(attrs));
       } while (this.token === this.tok.T_ATTRIBUTE);
     }
     return list;
@@ -8505,6 +8800,13 @@ module.exports = {
       return result(newExp, args);
     }
     var attrs = this.read_attr_list();
+    var isReadonly = this.token === this.tok.T_READ_ONLY;
+    if (isReadonly) {
+      if (this.version < 803) {
+        this.raiseError("Anonymous readonly classes are not allowed before PHP 8.3");
+      }
+      this.next();
+    }
     if (this.token === this.tok.T_CLASS) {
       var what = this.node("class");
       // Annonymous class declaration
@@ -8517,7 +8819,7 @@ module.exports = {
       if (this.expect("{")) {
         body = this.next().read_class_body(true, false);
       }
-      var whatNode = what(null, propExtends, propImplements, body, [0, 0, 0]);
+      var whatNode = what(null, propExtends, propImplements, body, [0, 0, 0, isReadonly ? 1 : 0]);
       whatNode.attrGroups = attrs;
       return result(whatNode, args);
     }
@@ -8545,6 +8847,7 @@ module.exports = {
       var result = this.read_namespace_name(true);
       if (this.token === this.tok.T_DOUBLE_COLON) {
         result = this.read_static_getter(result);
+        return this.recursive_variable_chain_scan(result, true, false);
       }
       return result;
     } else if (this.is("VARIABLE")) {
@@ -8555,7 +8858,7 @@ module.exports = {
   },
   handleDereferencable: function handleDereferencable(expr) {
     while (this.token !== this.EOF) {
-      if (this.token === this.tok.T_OBJECT_OPERATOR || this.token === this.tok.T_DOUBLE_COLON) {
+      if (this.token === this.tok.T_OBJECT_OPERATOR || this.token === this.tok.T_DOUBLE_COLON || this.token === this.tok.T_NULLSAFE_OBJECT_OPERATOR) {
         expr = this.recursive_variable_chain_scan(expr, false, false, true);
       } else if (this.token === this.tok.T_CURLY_OPEN || this.token === "[") {
         expr = this.read_dereferencable(expr);
@@ -8570,10 +8873,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 2706:
-/***/ ((module) => {
+/***/ 8214
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -8582,6 +8885,12 @@ module.exports = {
  */
 
 
+function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
+function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 module.exports = {
   /*
    * checks if current token is a reference keyword
@@ -8801,7 +9110,6 @@ module.exports = {
     var node = this.node("parameter");
     var parameterName = null;
     var value = null;
-    var types = null;
     var nullable = false;
     var readonly = false;
     var attrs = [];
@@ -8814,7 +9122,10 @@ module.exports = {
         this.raiseError("readonly properties can be used only on class constructor");
       }
     }
-    var flags = this.read_promoted();
+    var _this$read_promoted = this.read_promoted(),
+      _this$read_promoted2 = _slicedToArray(_this$read_promoted, 2),
+      flags = _this$read_promoted2[0],
+      flagsSet = _this$read_promoted2[1];
     if (!readonly && this.version >= 801 && this.token === this.tok.T_READ_ONLY) {
       if (is_class_constructor) {
         this.next();
@@ -8827,7 +9138,7 @@ module.exports = {
       this.next();
       nullable = true;
     }
-    types = this.read_types();
+    var types = this.read_types();
     if (nullable && !types) {
       this.raiseError("Expecting a type definition combined with nullable operator");
     }
@@ -8842,7 +9153,11 @@ module.exports = {
     if (this.token == "=") {
       value = this.next().read_expr();
     }
-    var result = node(parameterName, types, value, isRef, isVariadic, readonly, nullable, flags);
+    var hooks = [];
+    if (this.version >= 804 && flags && this.token === "{") {
+      hooks = this.read_property_hooks();
+    }
+    var result = node(parameterName, types, value, isRef, isVariadic, readonly, nullable, flags, hooks, flagsSet);
     if (attrs) result.attrGroups = attrs;
     return result;
   },
@@ -8852,8 +9167,12 @@ module.exports = {
     var MODE_INTERSECTION = "intersection";
     var types = [];
     var mode = MODE_UNSET;
+    var node = this.node();
     var type = this.read_type();
-    if (!type) return null;
+    if (!type) {
+      node.destroy();
+      return null;
+    }
 
     // we have matched a single type
     types.push(type);
@@ -8881,26 +9200,74 @@ module.exports = {
       types.push(this.read_type());
     }
     if (types.length === 1) {
+      node.destroy();
       return types[0];
     } else {
-      return mode === MODE_INTERSECTION ? this.node("intersectiontype")(types) : this.node("uniontype")(types);
+      return mode === MODE_INTERSECTION ? node("intersectiontype", types) : node("uniontype", types);
     }
   },
   read_promoted: function read_promoted() {
     var MODIFIER_PUBLIC = 1;
     var MODIFIER_PROTECTED = 2;
     var MODIFIER_PRIVATE = 4;
+    var firstModifier;
     if (this.token === this.tok.T_PUBLIC) {
       this.next();
-      return MODIFIER_PUBLIC;
+      firstModifier = MODIFIER_PUBLIC;
     } else if (this.token === this.tok.T_PROTECTED) {
       this.next();
-      return MODIFIER_PROTECTED;
+      firstModifier = MODIFIER_PROTECTED;
     } else if (this.token === this.tok.T_PRIVATE) {
       this.next();
-      return MODIFIER_PRIVATE;
+      firstModifier = MODIFIER_PRIVATE;
+    } else {
+      return [0, 0];
     }
-    return 0;
+
+    // PHP 8.4+ asymmetric visibility
+    if (this.version >= 804) {
+      if (this.token === "(") {
+        // shorthand: visibility(set) — firstModifier is the set modifier, read visibility is implicit
+        this.next(); // consume '('
+        if (this.token !== this.tok.T_STRING || this.text() !== "set") {
+          this.error("set");
+        } else {
+          this.next(); // consume 'set'
+        }
+        if (this.expect(")")) {
+          this.next(); // consume ')'
+        }
+        return [0, firstModifier]; // no explicit read visibility, set = firstModifier
+      }
+
+      // Check for explicit form: readVisibility setVisibility(set)
+      var setModifier = 0;
+      if (this.token === this.tok.T_PUBLIC) {
+        this.next();
+        setModifier = MODIFIER_PUBLIC;
+      } else if (this.token === this.tok.T_PROTECTED) {
+        this.next();
+        setModifier = MODIFIER_PROTECTED;
+      } else if (this.token === this.tok.T_PRIVATE) {
+        this.next();
+        setModifier = MODIFIER_PRIVATE;
+      }
+      if (setModifier > 0) {
+        if (this.expect("(")) {
+          this.next(); // consume '('
+        }
+        if (this.token !== this.tok.T_STRING || this.text() !== "set") {
+          this.error("set");
+        } else {
+          this.next(); // consume 'set'
+        }
+        if (this.expect(")")) {
+          this.next(); // consume ')'
+        }
+        return [firstModifier, setModifier];
+      }
+    }
+    return [firstModifier, 0];
   },
   /*
    * Reads a list of arguments
@@ -8912,8 +9279,9 @@ module.exports = {
     var result = [];
     this.expect("(") && this.next();
     if (this.version >= 801 && this.token === this.tok.T_ELLIPSIS && this.peek() === ")") {
-      result.push(this.node("variadicplaceholder")());
+      var variadicNode = this.node("variadicplaceholder");
       this.next();
+      result.push(variadicNode());
     } else if (this.token !== ")") {
       result = this.read_non_empty_argument_list();
     }
@@ -8986,6 +9354,21 @@ module.exports = {
         result.destroy();
         return this.read_namespace_name();
       }
+    } else if (this.version >= 802 && this.token === "(") {
+      // DNF type (PHP 8.2+): parenthesized intersection type, e.g. (A&B)|null
+      this.next(); // consume (
+      var innerTypes = [];
+      innerTypes.push(this.read_type());
+      while (this.token === "&") {
+        var nextToken = this.peek();
+        if (nextToken === this.tok.T_ELLIPSIS || nextToken === this.tok.T_VARIABLE) {
+          break;
+        }
+        this.next();
+        innerTypes.push(this.read_type());
+      }
+      this.expect(")") && this.next(); // consume )
+      return result("intersectiontype", innerTypes);
     }
     // fix : destroy not consumed node (release comments)
     result.destroy();
@@ -8993,10 +9376,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 4002:
-/***/ ((module) => {
+/***/ 9461
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -9016,13 +9399,13 @@ module.exports = {
   read_if: function read_if() {
     var result = this.node("if");
     var test = this.next().read_if_expr();
-    var body = null;
+    var body;
     var alternate = null;
     var shortForm = false;
     if (this.token === ":") {
       shortForm = true;
-      this.next();
       body = this.node("block");
+      this.next();
       var items = [];
       while (this.token !== this.EOF && this.token !== this.tok.T_ENDIF) {
         if (this.token === this.tok.T_ELSEIF) {
@@ -9033,6 +9416,9 @@ module.exports = {
           break;
         }
         items.push(this.read_inner_statement());
+      }
+      if (items.length === 0 && this.extractDoc && this._docs.length > this._docIndex) {
+        items.push(this.node("noop")());
       }
       body = body(null, items);
       this.expect(this.tok.T_ENDIF) && this.next();
@@ -9063,8 +9449,8 @@ module.exports = {
     var alternate = null;
     var result = this.node("if");
     var test = this.next().read_if_expr();
-    if (this.expect(":")) this.next();
     var body = this.node("block");
+    if (this.expect(":")) this.next();
     var items = [];
     while (this.token != this.EOF && this.token !== this.tok.T_ENDIF) {
       if (this.token === this.tok.T_ELSEIF) {
@@ -9076,26 +9462,33 @@ module.exports = {
       }
       items.push(this.read_inner_statement());
     }
+    if (items.length === 0 && this.extractDoc && this._docs.length > this._docIndex) {
+      items.push(this.node("noop")());
+    }
     return result(test, body(null, items), alternate, true);
   },
   /*
    *
    */
   read_else_short: function read_else_short() {
-    if (this.next().expect(":")) this.next();
+    this.next();
     var body = this.node("block");
+    if (this.expect(":")) this.next();
     var items = [];
     while (this.token != this.EOF && this.token !== this.tok.T_ENDIF) {
       items.push(this.read_inner_statement());
+    }
+    if (items.length === 0 && this.extractDoc && this._docs.length > this._docIndex) {
+      items.push(this.node("noop")());
     }
     return body(null, items);
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 3745:
-/***/ ((module) => {
+/***/ 5931
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -9116,11 +9509,10 @@ module.exports = {
   read_while: function read_while() {
     var result = this.node("while");
     this.expect(this.tok.T_WHILE) && this.next();
-    var test = null;
-    var body = null;
+    var body;
     var shortForm = false;
     if (this.expect("(")) this.next();
-    test = this.read_expr();
+    var test = this.read_expr();
     if (this.expect(")")) this.next();
     if (this.token === ":") {
       shortForm = true;
@@ -9142,8 +9534,7 @@ module.exports = {
     var result = this.node("do");
     this.expect(this.tok.T_DO) && this.next();
     var test = null;
-    var body = null;
-    body = this.read_statement();
+    var body = this.read_statement();
     if (this.expect(this.tok.T_WHILE)) {
       if (this.next().expect("(")) this.next();
       test = this.read_expr();
@@ -9168,7 +9559,7 @@ module.exports = {
     var init = [];
     var test = [];
     var increment = [];
-    var body = null;
+    var body;
     var shortForm = false;
     if (this.expect("(")) this.next();
     if (this.token !== ";") {
@@ -9208,13 +9599,12 @@ module.exports = {
   read_foreach: function read_foreach() {
     var result = this.node("foreach");
     this.expect(this.tok.T_FOREACH) && this.next();
-    var source = null;
     var key = null;
     var value = null;
-    var body = null;
+    var body;
     var shortForm = false;
     if (this.expect("(")) this.next();
-    source = this.read_expr();
+    var source = this.read_expr();
     if (this.expect(this.tok.T_AS)) {
       this.next();
       value = this.read_foreach_variable();
@@ -9264,10 +9654,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 9905:
-/***/ ((module) => {
+/***/ 9147
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -9291,10 +9681,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 1250:
-/***/ ((module) => {
+/***/ 9219
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -9330,8 +9720,7 @@ module.exports = {
     this.currentNamespace = name;
     if (this.token === ";") {
       this.currentNamespace = name;
-      body = this.next().read_top_statements();
-      this.expect(this.EOF);
+      body = this.next().read_top_statements(true);
       return result(name.name, body, false);
     } else if (this.token === "{") {
       this.currentNamespace = name;
@@ -9506,10 +9895,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 9889:
-/***/ ((module) => {
+/***/ 7170
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -9537,7 +9926,7 @@ module.exports = {
       // single quote fix
       return text.replace(/\\\\/g, "\\").replace(/\\'/g, "'");
     }
-    return text.replace(/\\"/, '"').replace(/\\([\\$nrtfve]|[xX][0-9a-fA-F]{1,2}|[0-7]{1,3}|u{([0-9a-fA-F]+)})/g, function ($match, p1, p2) {
+    return text.replace(/\\"/g, '"').replace(/\\([\\$nrtfve]|[xX][0-9a-fA-F]{1,2}|[0-7]{1,3}|u{([0-9a-fA-F]+)})/g, function ($match, p1, p2) {
       if (specialChar[p1]) {
         return specialChar[p1];
       } else if ("x" === p1[0] || "X" === p1[0]) {
@@ -9586,10 +9975,10 @@ module.exports = {
     var offset = 0;
     var leadingWhitespaceCharCount = 0;
     /*
-     * @var inCoutingState {boolean} reset to true after a new line
+     * @var inCountingState {boolean} reset to true after a new line
      * @private
      */
-    var inCoutingState = true;
+    var inCountingState = true;
     var chToCheck = indentation_uses_spaces ? " " : "\t";
     var inCheckState = false;
     if (!first_encaps_node) {
@@ -9602,14 +9991,12 @@ module.exports = {
       offset++;
     }
     while (offset < textSize) {
-      if (inCoutingState) {
+      if (inCountingState) {
         if (text[offset] === chToCheck) {
           leadingWhitespaceCharCount++;
         } else {
           inCheckState = true;
         }
-      } else {
-        inCoutingState = false;
       }
       if (text[offset] !== "\n" && inCheckState && leadingWhitespaceCharCount < indentation) {
         this.raiseError("Invalid body indentation level (expecting an indentation at least ".concat(indentation, ")"));
@@ -9618,7 +10005,7 @@ module.exports = {
       }
       if (text[offset] === "\n") {
         // Reset counting state
-        inCoutingState = true;
+        inCountingState = true;
         leadingWhitespaceCharCount = 0;
       }
       offset++;
@@ -9792,13 +10179,12 @@ module.exports = {
       this.next();
 
       // if this.lexer.heredoc_label.first_encaps_node -> remove first indents
-      result = result("string", false, this.version >= 703 && !this.lexer.heredoc_label.finished ? this.remove_heredoc_leading_whitespace_chars(this.resolve_special_chars(text, isDoubleQuote), this.lexer.heredoc_label.indentation, this.lexer.heredoc_label.indentation_uses_spaces, this.lexer.heredoc_label.first_encaps_node) : text, false, text);
+      result = result("string", false, this.version >= 703 && !this.lexer.heredoc_label.finished ? this.resolve_special_chars(this.remove_heredoc_leading_whitespace_chars(text, this.lexer.heredoc_label.indentation, this.lexer.heredoc_label.indentation_uses_spaces, this.lexer.heredoc_label.first_encaps_node), isDoubleQuote) : this.resolve_special_chars(text, isDoubleQuote), false, text);
     } else if (this.token === this.tok.T_DOLLAR_OPEN_CURLY_BRACES) {
       syntax = "simple";
       curly = true;
       // dynamic variable name
       // https://github.com/php/php-src/blob/master/Zend/zend_language_parser.y#L1239
-      name = null;
       if (this.next().token === this.tok.T_STRING_VARNAME) {
         name = this.node("variable");
         var varName = this.text();
@@ -9875,7 +10261,7 @@ module.exports = {
     this.next();
     var start = this.lexer.yylloc.prev_offset - (isBinary ? 1 : 0);
     var value = [];
-    var type = null;
+    var type;
     if (expect === "`") {
       type = this.ast.encapsed.TYPE_SHELL;
     } else if (expect === '"') {
@@ -9888,7 +10274,7 @@ module.exports = {
     while (this.token !== expect && this.token !== this.EOF) {
       value.push(this.read_encapsed_string_item(true));
     }
-    if (value.length > 0 && value[value.length - 1].kind === "encapsedpart" && value[value.length - 1].expression.kind === "string") {
+    if (type === this.ast.encapsed.TYPE_HEREDOC && value.length > 0 && value[value.length - 1].kind === "encapsedpart" && value[value.length - 1].expression.kind === "string") {
       var _node = value[value.length - 1].expression;
       var lastCh = _node.value[_node.value.length - 1];
       if (lastCh === "\n") {
@@ -9924,10 +10310,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 4992:
-/***/ ((module) => {
+/***/ 6261
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -9943,9 +10329,10 @@ module.exports = {
    *  top_statements ::= top_statement*
    * ```
    */
-  read_top_statements: function read_top_statements() {
+  read_top_statements: function read_top_statements(stopAtNamespace) {
     var result = [];
     while (this.token !== this.EOF && this.token !== "}") {
+      if (stopAtNamespace && this.token === this.tok.T_NAMESPACE) break;
       var statement = this.read_top_statement();
       if (statement) {
         if (Array.isArray(statement)) {
@@ -9984,7 +10371,7 @@ module.exports = {
       case this.tok.T_INTERFACE:
         return this.read_interface_declaration_statement(attrs);
       case this.tok.T_TRAIT:
-        return this.read_trait_declaration_statement();
+        return this.read_trait_declaration_statement(attrs);
       case this.tok.T_ENUM:
         return this.read_enum_declaration_statement(attrs);
       case this.tok.T_USE:
@@ -10105,9 +10492,9 @@ module.exports = {
       case this.tok.T_INTERFACE:
         return this.read_interface_declaration_statement();
       case this.tok.T_TRAIT:
-        return this.read_trait_declaration_statement();
+        return this.read_trait_declaration_statement(attrs);
       case this.tok.T_ENUM:
-        return this.read_enum_declaration_statement();
+        return this.read_enum_declaration_statement(attrs);
       case this.tok.T_HALT_COMPILER:
         {
           this.raiseError("__HALT_COMPILER() can only be used from the outermost scope");
@@ -10278,7 +10665,7 @@ module.exports = {
         }
       case this.tok.T_STRING:
         {
-          var _result10 = this.node();
+          var _result0 = this.node();
           var _current = [this.token, this.lexer.getState()];
           var labelNameText = this.text();
           var labelName = this.node("identifier");
@@ -10286,13 +10673,13 @@ module.exports = {
           if (this.next().token === ":") {
             labelName = labelName(labelNameText);
             this.next();
-            return _result10("label", labelName);
+            return _result0("label", labelName);
           } else {
             labelName.destroy();
           }
 
           // default fallback expr / T_STRING '::' (etc...)
-          _result10.destroy();
+          _result0.destroy();
           this.lexer.tokens.push(_current);
           var statement = this.node("expressionstatement");
           var _expr3 = this.next().read_expr();
@@ -10301,7 +10688,7 @@ module.exports = {
         }
       case this.tok.T_GOTO:
         {
-          var _result11 = this.node("goto");
+          var _result1 = this.node("goto");
           var _labelName = null;
           if (this.next().expect(this.tok.T_STRING)) {
             _labelName = this.node("identifier");
@@ -10310,7 +10697,7 @@ module.exports = {
             _labelName = _labelName(name);
             this.expectEndOfStatement();
           }
-          return _result11(_labelName);
+          return _result1(_labelName);
         }
       default:
         {
@@ -10339,10 +10726,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 7991:
-/***/ ((module) => {
+/***/ 2478
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -10435,10 +10822,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 4544:
-/***/ ((module) => {
+/***/ 77
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -10484,10 +10871,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 9957:
-/***/ ((module) => {
+/***/ 6077
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -10551,8 +10938,11 @@ module.exports = {
     if (this.token == separator) {
       if (preserveFirstSeparator) {
         result.push(typeof item === "function" ? this.node("noop")() : null);
+        this.next();
+      } else {
+        this.error();
+        return result;
       }
-      this.next();
     }
     if (typeof item === "function") {
       do {
@@ -10676,10 +11066,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 1099:
-/***/ ((module) => {
+/***/ 1130
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -10767,7 +11157,6 @@ module.exports = {
       name = this.next().read_expr();
       this.expect("}") && this.next();
       offset = offset("literal", name, null);
-      this.expect("(");
     } else {
       this.error([this.tok.T_VARIABLE, this.tok.T_STRING]);
       // graceful mode : set getter as error node and continue
@@ -10780,8 +11169,8 @@ module.exports = {
   },
   read_what: function read_what() {
     var is_static_lookup = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
-    var what = null;
-    var name = null;
+    var what;
+    var name;
     switch (this.next().token) {
       case this.tok.T_STRING:
         what = this.node("identifier");
@@ -10795,6 +11184,15 @@ module.exports = {
       case this.tok.T_VARIABLE:
         what = this.node("variable");
         name = this.text().substring(1);
+        this.next();
+        what = what(name, false);
+        break;
+      case this.tok.T_CLASS:
+        if (!is_static_lookup) {
+          this.error();
+        }
+        what = this.node("identifier");
+        name = this.text();
         this.next();
         what = what(name, false);
         break;
@@ -10866,10 +11264,6 @@ module.exports = {
             break;
           }
         case this.tok.T_DOUBLE_COLON:
-          // @see https://github.com/glayzzle/php-parser/issues/107#issuecomment-354104574
-          if (result.kind === "staticlookup" && result.offset.kind === "identifier") {
-            this.error();
-          }
           node = this.node("staticlookup");
           result = node(result, this.read_what(true));
 
@@ -11005,10 +11399,10 @@ module.exports = {
   }
 };
 
-/***/ }),
+/***/ },
 
-/***/ 6455:
-/***/ ((module) => {
+/***/ 1906
+(module) {
 
 /**
  * Copyright (C) 2018 Glayzzle (BSD3 License)
@@ -11023,18 +11417,18 @@ module.exports = {
  *
  * @enum {number}
  **/
-function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) { return typeof obj; } : function (obj) { return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }, _typeof(obj); }
-function ownKeys(object, enumerableOnly) { var keys = Object.keys(object); if (Object.getOwnPropertySymbols) { var symbols = Object.getOwnPropertySymbols(object); enumerableOnly && (symbols = symbols.filter(function (sym) { return Object.getOwnPropertyDescriptor(object, sym).enumerable; })), keys.push.apply(keys, symbols); } return keys; }
-function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { var source = null != arguments[i] ? arguments[i] : {}; i % 2 ? ownKeys(Object(source), !0).forEach(function (key) { _defineProperty(target, key, source[key]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(target, Object.getOwnPropertyDescriptors(source)) : ownKeys(Object(source)).forEach(function (key) { Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key)); }); } return target; }
-function _defineProperty(obj, key, value) { key = _toPropertyKey(key); if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
-function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return _typeof(key) === "symbol" ? key : String(key); }
-function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
-function _slicedToArray(arr, i) { return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest(); }
+function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
+function ownKeys(e, r) { var t = Object.keys(e); if (Object.getOwnPropertySymbols) { var o = Object.getOwnPropertySymbols(e); r && (o = o.filter(function (r) { return Object.getOwnPropertyDescriptor(e, r).enumerable; })), t.push.apply(t, o); } return t; }
+function _objectSpread(e) { for (var r = 1; r < arguments.length; r++) { var t = null != arguments[r] ? arguments[r] : {}; r % 2 ? ownKeys(Object(t), !0).forEach(function (r) { _defineProperty(e, r, t[r]); }) : Object.getOwnPropertyDescriptors ? Object.defineProperties(e, Object.getOwnPropertyDescriptors(t)) : ownKeys(Object(t)).forEach(function (r) { Object.defineProperty(e, r, Object.getOwnPropertyDescriptor(t, r)); }); } return e; }
+function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
+function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" == _typeof(i) ? i : i + ""; }
+function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
+function _slicedToArray(r, e) { return _arrayWithHoles(r) || _iterableToArrayLimit(r, e) || _unsupportedIterableToArray(r, e) || _nonIterableRest(); }
 function _nonIterableRest() { throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method."); }
-function _unsupportedIterableToArray(o, minLen) { if (!o) return; if (typeof o === "string") return _arrayLikeToArray(o, minLen); var n = Object.prototype.toString.call(o).slice(8, -1); if (n === "Object" && o.constructor) n = o.constructor.name; if (n === "Map" || n === "Set") return Array.from(o); if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen); }
-function _arrayLikeToArray(arr, len) { if (len == null || len > arr.length) len = arr.length; for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i]; return arr2; }
-function _iterableToArrayLimit(arr, i) { var _i = null == arr ? null : "undefined" != typeof Symbol && arr[Symbol.iterator] || arr["@@iterator"]; if (null != _i) { var _s, _e, _x, _r, _arr = [], _n = !0, _d = !1; try { if (_x = (_i = _i.call(arr)).next, 0 === i) { if (Object(_i) !== _i) return; _n = !1; } else for (; !(_n = (_s = _x.call(_i)).done) && (_arr.push(_s.value), _arr.length !== i); _n = !0); } catch (err) { _d = !0, _e = err; } finally { try { if (!_n && null != _i["return"] && (_r = _i["return"](), Object(_r) !== _r)) return; } finally { if (_d) throw _e; } } return _arr; } }
-function _arrayWithHoles(arr) { if (Array.isArray(arr)) return arr; }
+function _unsupportedIterableToArray(r, a) { if (r) { if ("string" == typeof r) return _arrayLikeToArray(r, a); var t = {}.toString.call(r).slice(8, -1); return "Object" === t && r.constructor && (t = r.constructor.name), "Map" === t || "Set" === t ? Array.from(r) : "Arguments" === t || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(t) ? _arrayLikeToArray(r, a) : void 0; } }
+function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
+function _iterableToArrayLimit(r, l) { var t = null == r ? null : "undefined" != typeof Symbol && r[Symbol.iterator] || r["@@iterator"]; if (null != t) { var e, n, i, u, a = [], f = !0, o = !1; try { if (i = (t = t.call(r)).next, 0 === l) { if (Object(t) !== t) return; f = !1; } else for (; !(f = (e = i.call(t)).done) && (a.push(e.value), a.length !== l); f = !0); } catch (r) { o = !0, n = r; } finally { try { if (!f && null != t["return"] && (u = t["return"](), Object(u) !== u)) return; } finally { if (o) throw n; } } return a; } }
+function _arrayWithHoles(r) { if (Array.isArray(r)) return r; }
 var TokenNames = {
   T_HALT_COMPILER: 101,
   T_USE: 102,
@@ -11178,7 +11572,8 @@ var TokenNames = {
   T_READ_ONLY: 240,
   T_NAME_RELATIVE: 241,
   T_NAME_QUALIFIED: 242,
-  T_NAME_FULLY_QUALIFIED: 243
+  T_NAME_FULLY_QUALIFIED: 243,
+  T_PIPE: 244
 };
 
 /**
@@ -11201,7 +11596,7 @@ var tokens = {
 };
 module.exports = Object.freeze(tokens);
 
-/***/ })
+/***/ }
 
 /******/ 	});
 /************************************************************************/
@@ -11234,7 +11629,7 @@ module.exports = Object.freeze(tokens);
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __webpack_require__(1427);
+/******/ 	var __webpack_exports__ = __webpack_require__(5362);
 /******/ 	__webpack_exports__ = __webpack_exports__["default"];
 /******/ 	
 /******/ 	return __webpack_exports__;

@@ -1,3 +1,7 @@
+### 2.0.7
+
+- `laravel2js`: a double-quoted string with two or more `\"` no longer keeps a backslash before the last quote (`"Say \"hi\""` gave `Say "hi\"`); php-parser updated to 3.7.0 ([#5](https://github.com/locize/laravelphp/pull/5), by [@Pharex38](https://github.com/Pharex38))
+
 ### 2.0.6
 
 - `laravel2js`: array entries without a key and entries with an integer key are kept, numbered the way PHP does (`['January', 'February']` gives `0` and `1`, `['x', 5 => 'five', 'y']` gives `0`, `5` and `6`); they were dropped ([#4](https://github.com/locize/laravelphp/pull/4), by [@Pharex38](https://github.com/Pharex38))

@@ -39,7 +39,7 @@
   },
   "module": "./esm/index.js",
   "dependencies": {
-    "php-parser": "^3.7.0"
+    "php-parser": "3.7.0"
   },
   "devDependencies": {
     "@babel/cli": "7.23.0",
